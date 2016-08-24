@@ -159,6 +159,11 @@ module ActiveMerchant #:nodoc:
         "B40K" => "Declined Post – Credit linked to unextracted settle transaction"
       }
 
+      ACH_RESPONSE_MESSAGES = {
+        # need to fill in from docs
+    }
+
+
       TRANSACTION_CODES = {
         authorize: 0,
         void_authorize: 2,
@@ -176,6 +181,9 @@ module ActiveMerchant #:nodoc:
         verify: 9,
 
         wallet_sale: 14,
+
+        ach_debit: 11,
+        void_ach_debit: 16
       }
 
       def initialize(options={})
@@ -184,13 +192,16 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(amount, payment_method, options={})
-        if credit_card?(payment_method)
-          action = :purchase
+        if payment_model?(payment_method)
+          action = purchase_type(payment_method)
           request = build_xml_transaction_request do |doc|
-            add_payment_method(doc, payment_method)
+            # infuriatingly, it matters where in the XML the payment method is located
+            add_payment_method(doc, payment_method) if payment_method.is_a?(CreditCard)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
             add_order_number(doc, options)
+            # infuriatingly, it matters where in the XML the payment method is located
+            add_payment_method(doc, payment_method) if payment_method.is_a?(Check)
           end
         else
           action = :wallet_sale
@@ -205,7 +216,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorize(amount, payment_method, options={})
-        if credit_card?(payment_method)
+        if payment_model?(payment_method)
           request = build_xml_transaction_request do |doc|
             add_payment_method(doc, payment_method)
             add_contact(doc, payment_method.name, options)
@@ -403,8 +414,8 @@ module ActiveMerchant #:nodoc:
       end
 
       # -- helper methods ----------------------------------------------------
-      def credit_card?(payment_method)
-        payment_method.respond_to?(:number)
+      def payment_model?(payment)
+        payment.is_a?(Model)
       end
 
       def split_authorization(authorization)
@@ -413,6 +424,17 @@ module ActiveMerchant #:nodoc:
 
       def void_type(action)
         :"void_#{action}"
+      end
+
+      def purchase_type(payment_method)
+        case payment_method
+        when CreditCard
+          :purchase
+        when Check
+          :ach_debit
+        else
+          raise "Unknown payment method #{payment_method.class.name}"
+        end
       end
 
       # -- request methods ---------------------------------------------------
@@ -486,15 +508,40 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_payment_method(doc, payment_method)
-        if payment_method.is_a?(CreditCard)
-          doc["v1"].card do
-            if payment_method.track_data.present?
-              add_swipe_data doc, payment_method.track_data
-            else
-              doc["v1"].sec payment_method.verification_value
-              doc["v1"].pan payment_method.number
-              doc["v1"].xprDt expiration_date(payment_method)
-            end
+        case payment_method
+        when CreditCard
+          add_credit_card doc, payment_method
+        when Check
+          add_ach doc, payment_method
+        else
+          raise "Unknown payment method type #{payment_method.class.name}"
+        end
+      end
+
+      def add_ach(doc, payment_method)
+        account_type = case payment_method.account_type
+        when 'checking'
+          0
+        when 'savings'
+          1
+        end
+
+        doc["v1"].achEcheck {
+          doc["v1"].bankRtNr payment_method.routing_number
+          doc["v1"].bankName payment_method.bank_name
+          doc["v1"].acctNr payment_method.account_number
+          doc["v1"].acctType account_type
+        }
+      end
+
+      def add_credit_card(doc, payment_method)
+        doc["v1"].card do
+          if payment_method.track_data.present?
+            add_swipe_data doc, payment_method.track_data
+          else
+            doc["v1"].sec payment_method.verification_value
+            doc["v1"].pan payment_method.number
+            doc["v1"].xprDt expiration_date(payment_method)
           end
         end
       end
