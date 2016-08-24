@@ -305,7 +305,9 @@ module ActiveMerchant #:nodoc:
           gsub(%r((<[^>]+pan>)[^<]+(<))i, '\1[FILTERED]\2').
           gsub(%r((<[^>]+sec>)[^<]+(<))i, '\1[FILTERED]\2').
           gsub(%r((<[^>]+id>)[^<]+(<))i, '\1[FILTERED]\2').
-          gsub(%r((<[^>]+regKey>)[^<]+(<))i, '\1[FILTERED]\2')
+          gsub(%r((<[^>]+regKey>)[^<]+(<))i, '\1[FILTERED]\2').
+          gsub(%r((<[^>]+trk1>)[^<]+(<))i, '\1[FILTERED]\2').
+          gsub(%r((<[^>]+trk2>)[^<]+(<))i, '\1[FILTERED]\2')
       end
 
       private
@@ -484,11 +486,31 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_payment_method(doc, payment_method)
-        doc["v1"].card {
-          doc["v1"].pan payment_method.number
-          doc["v1"].sec payment_method.verification_value
-          doc["v1"].xprDt expiration_date(payment_method)
-        }
+        if payment_method.is_a?(CreditCard)
+          doc["v1"].card do
+            if payment_method.track_data.present?
+              add_swipe_data doc, payment_method.track_data
+            else
+              doc["v1"].sec payment_method.verification_value
+              doc["v1"].pan payment_method.number
+              doc["v1"].xprDt expiration_date(payment_method)
+            end
+          end
+        end
+      end
+
+      def add_swipe_data(doc, track_data)
+        tracks = track_data.split(';')
+        track1 = tracks[0]
+        track2 = tracks[1]
+
+        # Starting and ending sentinels must be removed. For track 1, this includes the “%” and “?” symbols.
+        doc["v1"].trk1 track1[1...-2]
+
+        if track2
+          # Starting and ending sentinels must be removed. For track 2, this includes the “;” and “?” symbols.
+          doc["v1"].trk2 track2[1...-2]
+        end
       end
 
       def expiration_date(payment_method)
@@ -510,12 +532,14 @@ module ActiveMerchant #:nodoc:
           doc["v1"].title options[:title] if options[:title]
 
           if (billing_address = options[:billing_address])
-            doc["v1"].phone do
-              doc["v1"].type (options[:phone_number_type] || "4")
-              doc["v1"].nr billing_address[:phone].gsub(/\D/, '') if billing_address[:phone]
+            if billing_address[:phone]
+              doc["v1"].phone do
+                doc["v1"].type (options[:phone_number_type] || "4")
+                doc["v1"].nr billing_address[:phone].gsub(/\D/, '')
+              end
             end
             doc["v1"].addrLn1 billing_address[:address1]
-            doc["v1"].addrLn2 billing_address[:address2]
+            doc["v1"].addrLn2 billing_address[:address2] if billing_address[:address2]
             doc["v1"].city billing_address[:city]
             doc["v1"].state billing_address[:state]
             doc["v1"].zipCode billing_address[:zip]
