@@ -156,13 +156,13 @@ module ActiveMerchant #:nodoc:
       }
 
       EXTENDED_RESPONSE_MESSAGES = {
-        "B40K" => "Declined Post – Credit linked to unextracted settle transaction"
+        "B40K" => "Declined Post – Credit linked to unextracted settle transaction",
+        "B40A" => "Declined Post – Bad AVS result",
+        "B40B" => "Declined Post – Bad CVV result",
+        "B40N" => "Declined Post – Card type sent in message did not match card type derived from routing information",
+        "B40P" => "Declined Post – Card security code length invalid for the card type",
+        "B40R" => "The refund amount exceeded the transaction amount",
       }
-
-      ACH_RESPONSE_MESSAGES = {
-        # need to fill in from docs
-    }
-
 
       TRANSACTION_CODES = {
         authorize: 0,
@@ -194,7 +194,7 @@ module ActiveMerchant #:nodoc:
       def purchase(amount, payment_method, options={})
         if payment_model?(payment_method)
           action = purchase_type(payment_method)
-          request = build_xml_transaction_request do |doc|
+          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
             # infuriatingly, it matters where in the XML the payment method is located
             add_payment_method(doc, payment_method) if payment_method.is_a?(CreditCard)
             add_contact(doc, payment_method.name, options)
@@ -217,7 +217,7 @@ module ActiveMerchant #:nodoc:
 
       def authorize(amount, payment_method, options={})
         if payment_model?(payment_method)
-          request = build_xml_transaction_request do |doc|
+          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
             add_payment_method(doc, payment_method)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
@@ -284,27 +284,33 @@ module ActiveMerchant #:nodoc:
       end
 
       def store(payment_method, options={})
-        store_customer_request = build_xml_payment_storage_request do |doc|
-          store_customer_details(doc, payment_method.name, options)
-        end
+        customer_id = options[:customer_id]
 
         MultiResponse.run do |r|
-          r.process { commit(:store, store_customer_request) }
-          return r unless r.success? && r.params["custId"]
-          customer_id = r.params["custId"]
+          unless customer_id
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success? && r.params["custId"]
+            customer_id = r.params["custId"]
+          end
 
-          store_payment_method_request = build_xml_payment_storage_request do |doc|
-            doc["v1"].cust do
-              add_customer_id(doc, customer_id)
-              doc["v1"].pmt do
-                doc["v1"].type 0 # add
-                add_payment_method(doc, payment_method)
-              end
-            end
+          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+            add_wallet_details(doc, payment_method, customer_id, options)
           end
 
           r.process { commit(:store, store_payment_method_request) }
         end
+      end
+
+      def unstore(identification, options = {})
+      end
+
+      # non-standard gateway method
+      def store_customer(full_name, options)
+        request = build_xml_payment_storage_request do |doc|
+          store_customer_details(doc, full_name, options)
+        end
+
+        commit(:store, request)
       end
 
       def supports_scrubbing?
@@ -437,38 +443,42 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      def product_type(payment_method)
+        case payment_method
+        when CreditCard
+          5
+        when Check
+          4
+        else
+          raise "Unknown payment method #{payment_method.class.name}"
+        end
+      end
+
       # -- request methods ---------------------------------------------------
-      def build_xml_transaction_request
-        build_xml_request("SendTranRequest") do |doc|
+      def build_xml_transaction_request(product_type=nil)
+        build_xml_request("SendTranRequest", product_type) do |doc|
           yield doc
         end
       end
 
-      def build_xml_payment_storage_request
-        build_xml_request("UpdtRecurrProfRequest") do |doc|
+      def build_xml_payment_storage_request(product_type=nil)
+        build_xml_request("UpdtRecurrProfRequest", product_type) do |doc|
           yield doc
         end
       end
 
-      def build_xml_payment_update_request
-        merchant_product_type = 5 # credit card
-        build_xml_request("UpdtRecurrProfRequest", merchant_product_type) do |doc|
-          yield doc
-        end
-      end
+      # def build_xml_payment_search_request
+      #   build_xml_request("FndRecurrProfRequest") do |doc|
+      #     yield doc
+      #   end
+      # end
 
-      def build_xml_payment_search_request
-        build_xml_request("FndRecurrProfRequest") do |doc|
-          yield doc
-        end
-      end
-
-      def build_xml_request(wrapper, merchant_product_type=nil)
+      def build_xml_request(wrapper, product_type=nil)
         Nokogiri::XML::Builder.new(encoding: "UTF-8") do |xml|
           xml["soapenv"].Envelope("xmlns:soapenv" => SOAPENV_NAMESPACE) do
             xml["soapenv"].Body do
               xml["v1"].send(wrapper, "xmlns:v1" => V1_NAMESPACE) do
-                add_merchant(xml)
+                add_merchant(xml, product_type)
                 yield(xml)
               end
             end
@@ -507,18 +517,18 @@ module ActiveMerchant #:nodoc:
         }
       end
 
-      def add_payment_method(doc, payment_method)
+      def add_payment_method(doc, payment_method, ach_param: 'achEcheck')
         case payment_method
         when CreditCard
           add_credit_card doc, payment_method
         when Check
-          add_ach doc, payment_method
+          add_ach doc, payment_method, ach_param
         else
           raise "Unknown payment method type #{payment_method.class.name}"
         end
       end
 
-      def add_ach(doc, payment_method)
+      def add_ach(doc, payment_method, ach_param)
         account_type = case payment_method.account_type
         when 'checking'
           0
@@ -526,7 +536,8 @@ module ActiveMerchant #:nodoc:
           1
         end
 
-        doc["v1"].achEcheck {
+        # because the parameter has to be named differently based upon what kind of request you're sending >:
+        doc["v1"].public_send(ach_param) {
           doc["v1"].bankRtNr payment_method.routing_number
           doc["v1"].bankName payment_method.bank_name
           doc["v1"].acctNr payment_method.account_number
@@ -539,8 +550,8 @@ module ActiveMerchant #:nodoc:
           if payment_method.track_data.present?
             add_swipe_data doc, payment_method.track_data
           else
-            doc["v1"].sec payment_method.verification_value
             doc["v1"].pan payment_method.number
+            doc["v1"].sec payment_method.verification_value
             doc["v1"].xprDt expiration_date(payment_method)
           end
         end
@@ -574,6 +585,9 @@ module ActiveMerchant #:nodoc:
 
       def add_contact(doc, fullname, options)
         doc["v1"].contact do
+          if options[:create_or_update_customer] == :update
+            doc["v1"].id options[:customer_id]
+          end
           doc["v1"].fullName fullname
           doc["v1"].coName options[:company_name] if options[:company_name]
           doc["v1"].title options[:title] if options[:title]
@@ -619,12 +633,34 @@ module ActiveMerchant #:nodoc:
       end
 
       def store_customer_details(doc, fullname, options)
+        customer_update_type = 0 # add
+        if options[:create_or_update_customer] == :update
+          customer_update_type = 1
+        end
+
         options[:contact_type] = 1 # recurring
         options[:contact_stat] = 1 # active
 
         doc["v1"].cust do
-          doc["v1"].type 0 # add
+          doc["v1"].type customer_update_type
           add_contact(doc, fullname, options)
+        end
+      end
+
+      def add_wallet_details(doc, payment_method, customer_id, options)
+        wallet_update_type = 0 # add
+        if options[:create_or_update_payment_method] == :update
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+        end
+
+        doc["v1"].cust do
+          add_customer_id(doc, customer_id)
+          doc["v1"].pmt do
+            doc["v1"].id wallet_id if wallet_id
+            doc["v1"].type wallet_update_type
+            add_payment_method(doc, payment_method, ach_param: 'ach')
+          end
         end
       end
 
