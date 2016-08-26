@@ -173,9 +173,9 @@ module ActiveMerchant #:nodoc:
         void_purchase: 6,
         void_capture: 6,
 
-        refund: 4,
+        refund_purchase: 4,
         credit: 5,
-        void_refund: 13,
+        void_refund_purchase: 13,
         void_credit: 13,
 
         verify: 9,
@@ -183,7 +183,8 @@ module ActiveMerchant #:nodoc:
         wallet_sale: 14,
 
         ach_debit: 11,
-        void_ach_debit: 16
+        void_ach_debit: 16,
+        refund_ach_debit: 16
       }
 
       def initialize(options={})
@@ -250,19 +251,22 @@ module ActiveMerchant #:nodoc:
           add_original_transaction_data(doc, transaction_id)
         end
 
-        commit(void_type(action), request)
+        commit(void_type(action, options[:original_payment_method]), request)
       end
 
       def refund(amount, authorization, options={})
-        transaction_id = split_authorization(authorization)[1]
+        action, transaction_id = split_authorization(authorization)
+
+        original_payment_method = options[:original_payment_method]
+        needs_amount = !original_payment_method || original_payment_method.is_a?(CreditCard)
 
         request = build_xml_transaction_request do |doc|
-          add_amount(doc, amount)
+          add_amount(doc, amount) if needs_amount
           add_original_transaction_data(doc, transaction_id)
           add_order_number(doc, options)
         end
 
-        commit(:refund, request)
+        commit(refund_type(action, original_payment_method), request)
       end
 
       def credit(amount, payment_method, options={})
@@ -302,6 +306,11 @@ module ActiveMerchant #:nodoc:
       end
 
       def unstore(identification, options = {})
+        request = build_xml_payment_storage_request do |doc|
+          unstore_wallet(doc, options[:customer_id], identification)
+        end
+
+        commit(:store, request)
       end
 
       # non-standard gateway method
@@ -428,8 +437,20 @@ module ActiveMerchant #:nodoc:
         authorization.split(AUTHORIZATION_FIELD_SEPARATOR)
       end
 
-      def void_type(action)
+      def void_type(action, original_payment_method = nil)
+        if action.to_sym == :wallet_sale && original_payment_method
+          action = purchase_type original_payment_method
+        end
+
         :"void_#{action}"
+      end
+
+      def refund_type(action, original_payment_method = nil)
+        if action.to_sym == :wallet_sale && original_payment_method
+          action = purchase_type original_payment_method
+        end
+
+        :"refund_#{action}"
       end
 
       def purchase_type(payment_method)
@@ -629,6 +650,17 @@ module ActiveMerchant #:nodoc:
       def add_original_transaction_data(doc, authorization)
         doc["v1"].origTranData do
           doc["v1"].tranNr authorization
+        end
+      end
+
+      def unstore_wallet(doc, customer_id, wallet_id)
+        doc["v1"].cust do
+          add_customer_id(doc, customer_id)
+          doc["v1"].pmt do
+            doc["v1"].id wallet_id
+            doc["v1"].type 1 # update
+            doc["v1"].status  0 # inactive
+          end
         end
       end
 
