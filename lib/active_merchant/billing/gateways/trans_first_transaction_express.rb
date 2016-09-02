@@ -187,6 +187,28 @@ module ActiveMerchant #:nodoc:
         refund_ach_debit: 16
       }
 
+      class PaymentSources
+        CC = {
+          moto: 0,
+          retail: 1,
+          ecommerce: 2,
+          mobile: 3
+        }
+        ACH = {
+          tel: 0,
+          web: 1,
+          ppd: 2,
+          ccd: 3
+        }
+
+        ACH.each do |key, value|
+          const_set key.to_s.upcase, key
+        end
+        CC.each do |key, value|
+          const_set key.to_s.upcase, key
+        end
+      end
+
       def initialize(options={})
         requires!(options, :gateway_id, :reg_key)
         super
@@ -197,19 +219,20 @@ module ActiveMerchant #:nodoc:
           action = purchase_type(payment_method)
           request = build_xml_transaction_request(product_type(payment_method)) do |doc|
             # infuriatingly, it matters where in the XML the payment method is located
-            add_payment_method(doc, payment_method) if payment_method.is_a?(CreditCard)
+            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(CreditCard)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
             # infuriatingly, it matters where in the XML the payment method is located
-            add_payment_method(doc, payment_method) if payment_method.is_a?(Check)
+            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
           end
         else
           action = :wallet_sale
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
-            add_wallet_id(doc, wallet_id)
+            add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
 
@@ -219,15 +242,16 @@ module ActiveMerchant #:nodoc:
       def authorize(amount, payment_method, options={})
         if payment_model?(payment_method)
           request = build_xml_transaction_request(product_type(payment_method)) do |doc|
-            add_payment_method(doc, payment_method)
+            add_payment_method(doc, payment_method, source: options[:payment_source])
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
           end
         else
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
-            add_wallet_id(doc, wallet_id)
+            add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
 
@@ -475,6 +499,14 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      def industry_code_from(source)
+        PaymentSources::CC[source]
+      end
+
+      def secc_code_from(source)
+        PaymentSources::ACH[source]
+      end
+
       # -- request methods ---------------------------------------------------
       def build_xml_transaction_request(product_type=nil)
         build_xml_request("SendTranRequest", product_type) do |doc|
@@ -538,18 +570,18 @@ module ActiveMerchant #:nodoc:
         }
       end
 
-      def add_payment_method(doc, payment_method, ach_param: 'achEcheck')
+      def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil)
         case payment_method
         when CreditCard
           add_credit_card doc, payment_method
         when Check
-          add_ach doc, payment_method, ach_param
+          add_ach doc, payment_method, ach_param, secc_code: secc_code_from(source)
         else
           raise "Unknown payment method type #{payment_method.class.name}"
         end
       end
 
-      def add_ach(doc, payment_method, ach_param)
+      def add_ach(doc, payment_method, ach_param, secc_code: nil)
         account_type = case payment_method.account_type
         when 'checking'
           0
@@ -563,6 +595,7 @@ module ActiveMerchant #:nodoc:
           doc["v1"].bankName payment_method.bank_name
           doc["v1"].acctNr payment_method.account_number
           doc["v1"].acctType account_type
+          doc["v1"].seccCode secc_code if secc_code
         }
       end
 
@@ -576,6 +609,11 @@ module ActiveMerchant #:nodoc:
             doc["v1"].xprDt expiration_date(payment_method)
           end
         end
+      end
+
+      def add_industry_code(doc, source)
+        industry_code = industry_code_from(source)
+        doc["v1"].indCode industry_code if industry_code
       end
 
       def add_swipe_data(doc, track_data)
@@ -702,9 +740,12 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def add_wallet_id(doc, wallet_id)
+      def add_wallet_id(doc, wallet_id, source: nil)
+        secc_code = secc_code_from(source)
+
         doc["v1"].recurMan do
           doc["v1"].id wallet_id
+          doc["v1"].seccCode secc_code if secc_code
         end
       end
     end
