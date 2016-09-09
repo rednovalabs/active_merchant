@@ -418,21 +418,24 @@ module ActiveMerchant #:nodoc:
 
         # normalize the response body so we don't have to know the name of the
         # root element
-        begin
-          new_response_body = <<-XML
-          <root>
-          #{doc.at_xpath('/Envelope/Body').children.first.children.to_xml}
-          </root>
-          XML
+        body = begin
+          doc.at_xpath('/Envelope/Body').children.first.children.to_xml
         rescue NoMethodError
           # if their API has an error it responds with HTML :rolleyes:
-          new_response_body = doc.to_xml
+          doc.to_xml
         end
+        new_response_body = <<-XML
+        <root>
+        #{body}
+        </root>
+        XML
 
         Hash.from_xml(new_response_body)['root']
       end
 
       def success_from(response)
+        return unless response
+
         fault = response["Fault"]
         approved_transaction = APPROVAL_CODES.include?(response["rspCode"])
         found_contact = response["cust"]
@@ -454,8 +457,9 @@ module ActiveMerchant #:nodoc:
 
           message = RESPONSE_MESSAGES[code]
           extended = EXTENDED_RESPONSE_MESSAGES[extended_code]
+          ach = response.try(:[], 'achResponse').try(:[], 'Message')
 
-          [message, extended].compact.join('. ')
+          [message, extended, ach].compact.join('. ')
         else
           response["faultstring"]
         end
