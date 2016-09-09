@@ -329,12 +329,25 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def unstore(identification, options = {})
-        request = build_xml_payment_storage_request do |doc|
-          unstore_wallet(doc, options[:customer_id], identification)
-        end
+      def unstore(wallet_id, options = {})
+        customer_id = options[:customer_id]
+        options[:create_or_update_payment_method] = :delete
+        options[:payment_id] = wallet_id
 
-        commit(:store, request)
+        MultiResponse.run do |r|
+          r.process { find_wallet(wallet_id) }
+          return r unless r.success? && r.params["cust"]
+          wallet_details = r.params['cust']['pmt'].find{|pmt| pmt['id'] == wallet_id}
+          name = r.params['cust']['contact']['fullName']
+
+          payment_method = build_payment_method_from_wallet_details(name, wallet_details)
+
+          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+            add_wallet_details(doc, payment_method, customer_id, options)
+          end
+
+          r.process { commit(:store, store_payment_method_request) }
+        end
       end
 
       # non-standard gateway method
@@ -390,8 +403,8 @@ module ActiveMerchant #:nodoc:
           response,
           error_code: error_code_from(succeeded, response),
           authorization: authorization_from(action, response),
-          avs_result: AVSResult.new(code: response["AVSCode"]),
-          cvv_result: CVVResult.new(response["CVV2Response"]),
+          avs_result: avs_from(response),
+          cvv_result: cvv_from(response),
           test: test?
         )
       end
@@ -401,30 +414,35 @@ module ActiveMerchant #:nodoc:
       end
 
       def parse(xml)
-        response = {}
         doc = Nokogiri::XML(xml).remove_namespaces!
 
-        doc.css("Envelope Body *").each do |node|
-          # node.name is more readable, but uniq_name is occasionally necessary
-          uniq_name = [node.parent.name, node.name].join('_')
-          response[uniq_name] = node.text
-          response[node.name] = node.text
+        # normalize the response body so we don't have to know the name of the
+        # root element
+        begin
+          new_response_body = <<-XML
+          <root>
+          #{doc.at_xpath('/Envelope/Body').children.first.children.to_xml}
+          </root>
+          XML
+        rescue NoMethodError
+          # if their API has an error it responds with HTML :rolleyes:
+          new_response_body = doc.to_xml
         end
 
-        response
+        Hash.from_xml(new_response_body)['root']
       end
 
       def success_from(response)
         fault = response["Fault"]
         approved_transaction = APPROVAL_CODES.include?(response["rspCode"])
-        found_contact = response["FndRecurrProfResponse"]
+        found_contact = response["cust"]
 
         return !fault && (approved_transaction || found_contact)
       end
 
       def error_code_from(succeeded, response)
         return if succeeded
-        response["errorCode"] || response["rspCode"]
+        response['detail'].try(:[], 'SystemFault').try(:[], "errorCode") || response["rspCode"]
       end
 
       def message_from(succeeded, response)
@@ -444,12 +462,24 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorization_from(action, response)
-        authorization = response["tranNr"] || response["pmtId"]
+        authorization = response['tranData'].try(:[], "tranNr") || response["pmtId"]
 
         # guard so we don't return something like "purchase|"
         return unless authorization
 
         [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
+      end
+
+      def avs_from(response)
+        return unless response['authRsp']
+
+        AVSResult.new(code: response["authRsp"]["avsRslt"])
+      end
+
+      def cvv_from(response)
+        return unless response['authRsp']
+
+        CVVResult.new(response["authRsp"]['secRslt'])
       end
 
       # -- helper methods ----------------------------------------------------
@@ -507,6 +537,28 @@ module ActiveMerchant #:nodoc:
         PaymentSources::ACH[source]
       end
 
+      def build_payment_method_from_wallet_details(name, wallet_details)
+        payment_method = if wallet_details['ach']
+          ::ActiveMerchant::Billing::Check.new({
+            name: name,
+            bank_name: wallet_details['ach']['bankName'],
+            routing_number: wallet_details['ach']['bankRtNr'],
+            account_number: wallet_details['ach']['acctNr'],
+            account_type: wallet_details['ach']['acctType'] == '0' ? 'checking' : 'savings'
+          })
+        elsif wallet_details['card']
+          ::ActiveMerchant::Billing::CreditCard.new({
+            name: name,
+            number: wallet_details['card']['pan'],
+            year: wallet_details['card']['xprDt'].slice(0,2),
+            month: wallet_details['card']['xprDt'].slice(2,2),
+            verification_value: '123'
+          })
+        end
+
+        payment_method
+      end
+
       # -- request methods ---------------------------------------------------
       def build_xml_transaction_request(product_type=nil)
         build_xml_request("SendTranRequest", product_type) do |doc|
@@ -520,11 +572,11 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      # def build_xml_payment_search_request
-      #   build_xml_request("FndRecurrProfRequest") do |doc|
-      #     yield doc
-      #   end
-      # end
+      def build_xml_payment_search_request
+        build_xml_request("FndRecurrProfRequest") do |doc|
+          yield doc
+        end
+      end
 
       def build_xml_request(wrapper, product_type=nil)
         Nokogiri::XML::Builder.new(encoding: "UTF-8") do |xml|
@@ -537,6 +589,17 @@ module ActiveMerchant #:nodoc:
             end
           end
         end.doc.root.to_xml
+      end
+
+      def find_wallet(wallet_id)
+        request = build_xml_payment_search_request do |doc|
+          doc["v1"].type 1 # recurring
+          doc["v1"].pmtCrta {
+            doc["v1"].pmtId wallet_id
+          }
+        end
+
+        commit(:store, request)
       end
 
       def add_transaction_code_to_request(request, action)
@@ -697,7 +760,6 @@ module ActiveMerchant #:nodoc:
           doc["v1"].pmt do
             doc["v1"].id wallet_id
             doc["v1"].type 1 # update
-            doc["v1"].status  0 # inactive
           end
         end
       end
@@ -719,9 +781,15 @@ module ActiveMerchant #:nodoc:
 
       def add_wallet_details(doc, payment_method, customer_id, options)
         wallet_update_type = 0 # add
-        if options[:create_or_update_payment_method] == :update
+        payment_status_type = 1 # active
+        case options[:create_or_update_payment_method]
+        when :update
           wallet_update_type = 1
           wallet_id = options[:payment_id]
+        when :delete
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+          payment_status_type = 0 # inactive
         end
 
         doc["v1"].cust do
@@ -730,6 +798,7 @@ module ActiveMerchant #:nodoc:
             doc["v1"].id wallet_id if wallet_id
             doc["v1"].type wallet_update_type
             add_payment_method(doc, payment_method, ach_param: 'ach')
+            doc["v1"].status payment_status_type
           end
         end
       end
