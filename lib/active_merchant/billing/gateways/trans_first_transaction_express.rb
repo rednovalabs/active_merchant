@@ -325,7 +325,10 @@ module ActiveMerchant #:nodoc:
             add_wallet_details(doc, payment_method, customer_id, options)
           end
 
-          r.process { commit(:store, store_payment_method_request) }
+          response = r.process { commit(:store, store_payment_method_request) }
+          # merge the customer_id back in so callers can store it
+          response.params['custId'] = customer_id
+          response
         end
       end
 
@@ -337,8 +340,9 @@ module ActiveMerchant #:nodoc:
         MultiResponse.run do |r|
           r.process { find_wallet(wallet_id) }
           return r unless r.success? && r.params["cust"]
-          wallet_details = r.params['cust']['pmt'].find{|pmt| pmt['id'] == wallet_id}
+          wallet_details = Array.wrap(r.params['cust']['pmt']).find{|pmt| ::Rails.logger.ap pmt; pmt['id'] == wallet_id}
           name = r.params['cust']['contact']['fullName']
+          customer_id ||= r.params['cust']['contact']['id']
 
           payment_method = build_payment_method_from_wallet_details(name, wallet_details)
 
@@ -755,16 +759,6 @@ module ActiveMerchant #:nodoc:
       def add_original_transaction_data(doc, authorization)
         doc["v1"].origTranData do
           doc["v1"].tranNr authorization
-        end
-      end
-
-      def unstore_wallet(doc, customer_id, wallet_id)
-        doc["v1"].cust do
-          add_customer_id(doc, customer_id)
-          doc["v1"].pmt do
-            doc["v1"].id wallet_id
-            doc["v1"].type 1 # update
-          end
         end
       end
 
