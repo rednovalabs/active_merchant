@@ -232,6 +232,7 @@ module ActiveMerchant #:nodoc:
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
@@ -251,6 +252,7 @@ module ActiveMerchant #:nodoc:
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
