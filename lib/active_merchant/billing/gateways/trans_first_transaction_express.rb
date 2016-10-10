@@ -315,12 +315,23 @@ module ActiveMerchant #:nodoc:
 
       def store(payment_method, options={})
         customer_id = options[:customer_id]
+        wallet_id = options[:payment_id]
+
+        store_new_customer = !customer_id && !wallet_id
+        update_wallet = options[:create_or_update_payment_method] == :update && wallet_id
 
         MultiResponse.run do |r|
-          unless customer_id
+          if store_new_customer
             r.process { store_customer(payment_method.name, options) }
             return r unless r.success? && r.params["custId"]
             customer_id = r.params["custId"]
+          elsif update_wallet
+            r.process { find_wallet(wallet_id) }
+            return r unless r.success? && r.params["cust"]
+            options[:customer_id] = customer_id = r.params['cust']['contact']['id']
+            options[:create_or_update_customer] = :update
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success?
           end
 
           store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
@@ -342,7 +353,7 @@ module ActiveMerchant #:nodoc:
         MultiResponse.run do |r|
           r.process { find_wallet(wallet_id) }
           return r unless r.success? && r.params["cust"]
-          wallet_details = Array.wrap(r.params['cust']['pmt']).find{|pmt| ::Rails.logger.ap pmt; pmt['id'] == wallet_id}
+          wallet_details = Array.wrap(r.params['cust']['pmt']).find {|pmt| pmt['id'] == wallet_id}
           name = r.params['cust']['contact']['fullName']
           customer_id ||= r.params['cust']['contact']['id']
 
