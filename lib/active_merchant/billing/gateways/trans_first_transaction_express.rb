@@ -689,7 +689,7 @@ module ActiveMerchant #:nodoc:
             add_swipe_data doc, payment_method.track_data
           else
             doc["v1"].pan payment_method.number
-            doc["v1"].sec payment_method.verification_value
+            doc["v1"].sec payment_method.verification_value if payment_method.verification_value
             doc["v1"].xprDt expiration_date(payment_method)
           end
         end
