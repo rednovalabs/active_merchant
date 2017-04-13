@@ -783,7 +783,7 @@ module ActiveMerchant #:nodoc:
             doc["v1"].city billing_address[:city] if billing_address[:city]
             doc["v1"].state billing_address[:state] if billing_address[:state]
             doc["v1"].zipCode billing_address[:zip] if billing_address[:zip]
-            doc["v1"].ctry "US"
+            doc["v1"].ctry billing_address[:country] if billing_address[:country]
           end
 
           doc["v1"].email options[:email] if options[:email]
