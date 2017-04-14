@@ -744,10 +744,10 @@ module ActiveMerchant #:nodoc:
         # Starting and ending sentinels must be removed. For track 1, this includes the “%” and “?” symbols.
         doc["v1"].trk1 track1[1...-2]
 
-        if track2
-          # Starting and ending sentinels must be removed. For track 2, this includes the “;” and “?” symbols.
-          doc["v1"].trk2 track2[1...-2]
-        end
+        # if track2
+        #   # Starting and ending sentinels must be removed. For track 2, this includes the “;” and “?” symbols.
+        #   doc["v1"].trk2 track2[1...-2]
+        # end
       end
 
       def expiration_date(payment_method)
