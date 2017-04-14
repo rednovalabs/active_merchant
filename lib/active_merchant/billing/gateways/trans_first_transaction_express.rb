@@ -742,7 +742,7 @@ module ActiveMerchant #:nodoc:
         track2 = tracks[1]
 
         # Starting and ending sentinels must be removed. For track 1, this includes the “%” and “?” symbols.
-        doc["v1"].trk1 track1[1...-2]
+        doc["v1"].trk1 track1[1...-1]
 
         # if track2
         #   # Starting and ending sentinels must be removed. For track 2, this includes the “;” and “?” symbols.
