@@ -739,15 +739,13 @@ module ActiveMerchant #:nodoc:
       def add_swipe_data(doc, track_data)
         tracks = track_data.split(';')
         track1 = tracks[0]
-        track2 = tracks[1]
 
         # Starting and ending sentinels must be removed. For track 1, this includes the “%” and “?” symbols.
-        doc["v1"].trk1 track1[1...-1]
-
-        # if track2
-        #   # Starting and ending sentinels must be removed. For track 2, this includes the “;” and “?” symbols.
-        #   doc["v1"].trk2 track2[1...-2]
-        # end
+        # We specifically inspect the start and end sentinals because there is
+        # so much variance in track data. Blindly stripping them is a bad idea
+        track1 = track1[1..-1] if track1.first == '%'
+        track1 = track1.chop if track1.last == '?'
+        doc["v1"].trk1 track1
       end
 
       def expiration_date(payment_method)
