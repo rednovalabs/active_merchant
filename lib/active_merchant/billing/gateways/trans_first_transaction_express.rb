@@ -260,6 +260,9 @@ module ActiveMerchant #:nodoc:
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
+            add_merchant_order_number(doc, options)
+            add_tax_idcr(doc, options)
+            add_tax_amt(doc, options)
             # infuriatingly, it matters where in the XML the payment method is located
             add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
           end
@@ -326,6 +329,7 @@ module ActiveMerchant #:nodoc:
           add_amount(doc, amount) if needs_amount
           add_original_transaction_data(doc, transaction_id)
           add_order_number(doc, options)
+          add_merchant_order_number(doc, options)
         end
 
         commit(refund_type(action, original_payment_method), request)
@@ -687,6 +691,32 @@ module ActiveMerchant #:nodoc:
 
         doc["v1"].authReq {
           doc["v1"].ordNr options[:order_id]
+        }
+      end
+
+      def add_merchant_order_number(doc, options)
+        return unless options[:merchant_order_id]
+
+        doc["v1"].authReq {
+          doc["v1"].purrCard {
+            doc["v1"].mercOrdNr options[:merchant_order_id]
+          }
+        }
+      end
+
+      def add_tax_idcr(doc, options)
+        return unless options[:tax_idcr]
+
+        doc["v1"].tax {
+          doc["v1"].idcr options[:tax_idcr]
+        }
+      end
+
+      def add_tax_amt(doc, options)
+        return unless options[:tax_amt]
+
+        doc["v1"].tax {
+          doc["v1"].amt options[:tax_amt]
         }
       end
 
