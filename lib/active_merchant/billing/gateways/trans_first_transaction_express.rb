@@ -260,6 +260,7 @@ module ActiveMerchant #:nodoc:
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
+            add_tax_fields(doc, options)
             # infuriatingly, it matters where in the XML the payment method is located
             add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
           end
@@ -269,6 +270,8 @@ module ActiveMerchant #:nodoc:
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
+            add_order_number(doc, options)
+            add_tax_fields(doc, options)
             add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
@@ -683,10 +686,23 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_order_number(doc, options)
-        return unless options[:order_id]
+        return unless options[:order_id] || options[:merchant_order_id]
 
         doc["v1"].authReq {
-          doc["v1"].ordNr options[:order_id]
+          doc["v1"].ordNr options[:order_id] if options[:order_id]
+          if options[:merchant_order_id]
+            doc["v1"].purrCard {
+              doc["v1"].mercOrdNr options[:merchant_order_id]
+            }
+          end
+        }
+      end
+
+      def add_tax_fields(doc, options)
+        return unless options[:tax_idcr] || options[:tax_amt]
+        doc["v1"].tax {
+          doc["v1"].idcr options[:tax_idcr] if options[:tax_idcr]
+          doc["v1"].amt  options[:tax_amt]  if options[:tax_amt]
         }
       end
 
