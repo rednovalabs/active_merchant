@@ -691,7 +691,7 @@ module ActiveMerchant #:nodoc:
         doc["v1"].authReq {
           doc["v1"].ordNr options[:order_id] if options[:order_id]
           if options[:merchant_order_id]
-            doc["v1"].purrCard {
+            doc["v1"].purcCard {
               doc["v1"].mercOrdNr options[:merchant_order_id]
             }
           end
