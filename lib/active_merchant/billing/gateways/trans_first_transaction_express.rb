@@ -368,6 +368,7 @@ module ActiveMerchant #:nodoc:
             r.process { find_wallet(wallet_id) }
             return r unless r.success? && r.params["cust"]
             options[:customer_id] = customer_id = r.params['cust']['contact']['id']
+            options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
             options[:create_or_update_customer] = :update
             r.process { store_customer(payment_method.name, options) }
             return r unless r.success?
@@ -706,10 +707,10 @@ module ActiveMerchant #:nodoc:
         }
       end
 
-      def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil)
+      def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil, options: {})
         case payment_method
         when CreditCard
-          add_credit_card doc, payment_method
+          add_credit_card doc, payment_method, options
         when Check
           add_ach doc, payment_method, ach_param, secc_code: secc_code_from(source)
         else
@@ -735,12 +736,12 @@ module ActiveMerchant #:nodoc:
         }
       end
 
-      def add_credit_card(doc, payment_method)
+      def add_credit_card(doc, payment_method, options = {})
         doc["v1"].card do
           if payment_method.track_data.present?
             add_swipe_data doc, payment_method.track_data
           else
-            doc["v1"].pan payment_method.number
+            doc["v1"].pan options[:pmt_card_pan] || payment_method.number
             doc["v1"].sec payment_method.verification_value if payment_method.verification_value
             doc["v1"].xprDt expiration_date(payment_method)
           end
@@ -858,7 +859,7 @@ module ActiveMerchant #:nodoc:
           doc["v1"].pmt do
             doc["v1"].id wallet_id if wallet_id
             doc["v1"].type wallet_update_type
-            add_payment_method(doc, payment_method, ach_param: 'ach')
+            add_payment_method(doc, payment_method, ach_param: 'ach', options: options)
             doc["v1"].status payment_status_type
           end
         end
