@@ -32,7 +32,7 @@ class TransFirstTransactionExpressTest < Test::Unit::TestCase
     end.respond_with(partial_purchase_response)
 
     assert_success response
-    assert_equal "000000000555", response.params["amt"]
+    assert_equal "000000000555", response.params.dig('tranData', 'amt')
     assert response.test?
   end
 

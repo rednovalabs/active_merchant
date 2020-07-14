@@ -362,13 +362,13 @@ module ActiveMerchant #:nodoc:
         MultiResponse.run do |r|
           if store_new_customer
             r.process { store_customer(payment_method.name, options) }
-            return r unless r.success? && r.params["custId"]
+            return r unless r.success? && r.params&.[]("custId")
             customer_id = r.params["custId"]
           elsif update_wallet
             r.process { find_wallet(wallet_id) }
-            return r unless r.success? && r.params["cust"]
-            options[:customer_id] = customer_id = r.params['cust']['contact']['id']
-            options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
+            return r unless r.success? && r.params&.[]("cust")
+            options[:customer_id] = customer_id = r.params.dig('cust', 'contact', 'id')
+            options[:pmt_card_pan] = r.params.dig('cust', 'pmt', 'card', 'pan')
             options[:create_or_update_customer] = :update
             r.process { store_customer(payment_method.name, options) }
             return r unless r.success?
@@ -380,6 +380,7 @@ module ActiveMerchant #:nodoc:
 
           response = r.process { commit(:store, store_payment_method_request) }
           # merge the customer_id back in so callers can store it
+          response.params ||= {}
           response.params['custId'] = customer_id
           response
         end
@@ -392,10 +393,10 @@ module ActiveMerchant #:nodoc:
 
         MultiResponse.run do |r|
           r.process { find_wallet(wallet_id) }
-          return r unless r.success? && r.params["cust"]
-          wallet_details = Array.wrap(r.params['cust']['pmt']).find {|pmt| pmt['id'] == wallet_id}
-          name = r.params['cust']['contact']['fullName']
-          customer_id ||= r.params['cust']['contact']['id']
+          return r unless r.success? && r.params&.[]('cust')
+          wallet_details = Array.wrap(r.params.dig('cust', 'pmt')).find {|pmt| pmt&.[]('id') == wallet_id}
+          name = r.params.dig('cust', 'contact', 'fullName')
+          customer_id ||= r.params.dig('cust', 'contact', 'id')
 
           payment_method = build_payment_method_from_wallet_details(name, wallet_details)
 
@@ -451,6 +452,7 @@ module ActiveMerchant #:nodoc:
         end
 
         response = parse(raw_response)
+        response = {} if response.is_a?(String)
 
         succeeded = success_from(response)
 
@@ -561,7 +563,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def refund_type(action, original_payment_method = nil)
-        if action.to_sym == :wallet_sale && original_payment_method
+        if action.try(:to_sym) == :wallet_sale && original_payment_method
           action = purchase_type original_payment_method
         end
 
