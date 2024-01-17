@@ -5,6 +5,9 @@ module ActiveMerchant #:nodoc:
     # Convenience methods that can be included into a custom Credit Card object, such as an ActiveRecord based Credit Card object.
     module CreditCardMethods
       CARD_COMPANY_DETECTORS = {
+        'switch'             => ->(num) { num =~ /^6759\d{12}(\d{2,3})?$/ },
+        'solo'               => ->(num) { num =~ /^6767\d{12}(\d{2,3})?$/ },
+        'laser'              => ->(num) { num =~ /^(6304|6706|6709|6771(?!89))\d{8}(\d{4}|\d{6,7})?$/ },
         'visa'               => ->(num) { num =~ /^4\d{12}(\d{3})?(\d{3})?$/ },
         'master'             => ->(num) { num&.size == 16 && in_bin_range?(num.slice(0, 6), MASTERCARD_RANGES) },
         'elo'                => ->(num) { num&.size == 16 && in_bin_range?(num.slice(0, 6), ELO_RANGES) },

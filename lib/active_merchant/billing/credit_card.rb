@@ -87,7 +87,7 @@ module ActiveMerchant #:nodoc:
       attr_reader :number
 
       def number=(value)
-        @number = (empty?(value) ? value : filter_number(value))
+        @number = (empty?(value) || value.include?('*') ? value : filter_number(value))
       end
 
       # Returns or sets the expiry month for the card.
