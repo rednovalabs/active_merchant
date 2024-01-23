@@ -156,7 +156,48 @@ module ActiveMerchant #:nodoc:
       }
 
       EXTENDED_RESPONSE_MESSAGES = {
-        'B40K' => 'Declined Post – Credit linked to unextracted settle transaction'
+        'A400' =>	'Approved Post – Re-auth attempt approved and settled',
+        'A401' =>	'Approved Post – Reversal approved by NID',
+        'A402' =>	'Approved Post – Reversal enqueued by NID. The reversal has been accepted, and it will be sent when the Active/Active partner becomes available. There is no financial impact until the reversal has been pulled out of the queue. A reversal is not guaranteed to occur when the Active/Active partner becomes available. However, any financial discrepancy is found through reconciliation.',
+        'B3AR' =>	'AVS Required/Address Information Not Provided',
+        'B3BR' =>	'AVS and CVV2 Required/Information Not Provided',
+        'B3CR' =>	'CVV2 Required /CVV2 Not Provided',
+        'B3DB' =>	'AVS and CVV2 Response Code Declined',
+        'B400' =>	'Declined Post – Re-auth attempt declined and original auth settled',
+        'B401' =>	'Declined Post – Re-auth attempt declined and settle amount greater than auth amount',
+        'B402' =>	'Declined Post – Re-auth attempt declined and settle amount less than auth amount',
+        'B403' =>	'Declined Post – Re-auth attempt declined and original auth expired',
+        'B404' =>	'Declined Post – Merchant closed',
+        'B405' =>	'Declined Post – Invalid input type for this merchant',
+        'B406' =>	'Declined Post – Invalid transaction type for this merchant',
+        'B407' =>	'Declined Post – Invalid product type for this merchant',
+        'B408' =>	'Declined Post – Auth and settle amounts differ and merchant not configured for managed services',
+        'B410' =>	'Decline – Merchant does not have permission to resubmit MC transaction',
+        'B40A' =>	'Declined Post – Bad AVS result',
+        'B40B' =>	'Declined Post – Bad CVV result',
+        'B40C' =>	'Declined Post – Merchant’s closed date has passed, merchant forced closed',
+        'B40D' =>	'Declined Post – Re-Auth Resulted in Hard Decline',
+        'B40E' =>	'Declined Post – Merchant suspended',
+        'B40F' =>	'Declined Post – Invalid transaction linking',
+        'B40G' =>	'Declined Post – Original transaction already linked',
+        'B40H' =>	'Declined Post – Original transaction not found',
+        'B40I' =>	'Declined Post – Original transaction declined',
+        'B40J' =>	'Declined Post – Invalid merchant ID in linked transaction',
+        'B40K' =>	'Declined Post – Credit linked to unextracted settle transaction',
+        'B40L' =>	'Declined Post – Auth resubmission linked to approved auth',
+        'B40M' =>	'Declined Post – Merchant not configured',
+        'B40N' =>	'Declined Post – Card type sent in message did not match card type derived from routing information',
+        'B40P' =>	'Declined Post – Card security code length invalid for the card type',
+        'B40Q' =>	'Magnetic stripe invalid for the industry code',
+        'B40R' =>	'The refund amount exceeded the transaction amount.',
+        'B40S' =>	'The void/reversal is linked to an extracted transaction.',
+        'B40T' =>	'No account information could be found for this transaction.',
+        'B40U' =>	'revAuthOnVoid cannot be set for this Transaction Type.',
+        'B40V' =>	'The Original Auth is expired.',
+        'B40W' =>	'Incompatible Industry Code for Cardholder Authentication',
+        'B40X' =>	'Inconsistent Cardholder Authentication Data',
+        'B40Y' =>	'RPE transaction could not be processed.',
+        'B40Z' =>	'User Defined Field is not configured for the Merchant.',
       }
 
       TRANSACTION_CODES = {
@@ -169,8 +210,10 @@ module ActiveMerchant #:nodoc:
         void_capture: 6,
 
         refund: 4,
+        refund_purchase: 4,
         credit: 5,
         void_refund: 13,
+        void_refund_purchase: 13,
         void_credit: 13,
 
         verify: 9,
@@ -179,8 +222,34 @@ module ActiveMerchant #:nodoc:
         refund_echeck: 16,
         void_echeck: 16,
 
+        ach_debit: 11,
+        void_ach_debit: 16,
+        refund_ach_debit: 16,
+
         wallet_sale: 14
       }
+
+      class PaymentSources
+        CC = {
+          moto: 0,
+          retail: 1,
+          ecommerce: 2,
+          mobile: 3
+        }
+        ACH = {
+          tel: 0,
+          web: 1,
+          ppd: 2,
+          ccd: 3
+        }
+
+        ACH.each do |key, value|
+          const_set key.to_s.upcase, key
+        end
+        CC.each do |key, value|
+          const_set key.to_s.upcase, key
+        end
+      end
 
       def initialize(options = {})
         requires!(options, :gateway_id, :reg_key)
@@ -188,28 +257,28 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(amount, payment_method, options = {})
-        if credit_card?(payment_method)
-          action = :purchase
-          request = build_xml_transaction_request do |doc|
-            add_credit_card(doc, payment_method)
+        if payment_model?(payment_method)
+          action = purchase_type(payment_method)
+          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
+            # infuriatingly, it matters where in the XML the payment method is located
+            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(CreditCard)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
-          end
-        elsif echeck?(payment_method)
-          action = :purchase_echeck
-          request = build_xml_transaction_request do |doc|
-            add_echeck(doc, payment_method)
-            add_contact(doc, payment_method.name, options)
-            add_amount(doc, amount)
-            add_order_number(doc, options)
+            add_tax_fields(doc, options)
+            # infuriatingly, it matters where in the XML the payment method is located
+            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
           end
         else
           action = :wallet_sale
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
-            add_wallet_id(doc, wallet_id)
+            add_industry_code(doc, options[:payment_source])
+            add_order_number(doc, options)
+            add_tax_fields(doc, options)
+            add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
 
@@ -217,17 +286,19 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorize(amount, payment_method, options = {})
-        if credit_card?(payment_method)
-          request = build_xml_transaction_request do |doc|
-            add_credit_card(doc, payment_method)
+        if payment_model?(payment_method)
+          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
+            add_payment_method(doc, payment_method, source: options[:payment_source])
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
           end
         else
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
-            add_wallet_id(doc, wallet_id)
+            add_industry_code(doc, options[:payment_source])
+            add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
 
@@ -251,18 +322,22 @@ module ActiveMerchant #:nodoc:
           add_original_transaction_data(doc, transaction_id)
         end
 
-        commit(void_type(action), request)
+        commit(void_type(action, options[:original_payment_method]), request)
       end
 
       def refund(amount, authorization, options = {})
         action, transaction_id = split_authorization(authorization)
 
+        original_payment_method = options[:original_payment_method]
+        needs_amount = !original_payment_method || original_payment_method.is_a?(CreditCard)
+
         request = build_xml_transaction_request do |doc|
-          add_amount(doc, amount) unless action == 'purchase_echeck'
+          add_amount(doc, amount) if needs_amount
           add_original_transaction_data(doc, transaction_id)
+          add_order_number(doc, options)
         end
 
-        commit(refund_type(action), request)
+        commit(refund_type(action, original_payment_method), request)
       end
 
       def credit(amount, payment_method, options = {})
@@ -276,36 +351,77 @@ module ActiveMerchant #:nodoc:
 
       def verify(credit_card, options = {})
         request = build_xml_transaction_request do |doc|
-          add_credit_card(doc, credit_card)
+          add_payment_method(doc, credit_card)
           add_contact(doc, credit_card.name, options)
         end
 
         commit(:verify, request)
       end
 
+      # TODO: review this
       def store(payment_method, options = {})
-        store_customer_request = build_xml_payment_storage_request do |doc|
-          store_customer_details(doc, payment_method.name, options)
-        end
+        customer_id = options[:customer_id]
+        wallet_id = options[:payment_id]
+
+        store_new_customer = !customer_id && !wallet_id
+        update_wallet = options[:create_or_update_payment_method] == :update && wallet_id
 
         MultiResponse.run do |r|
-          r.process { commit(:store, store_customer_request) }
-          return r unless r.success? && r.params['custId']
+          if store_new_customer
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success? && r.params['custId']
+            customer_id = r.params['custId']
+          elsif update_wallet
+            r.process { find_wallet(wallet_id) }
+            return r unless r.success? && r.params['cust']
+            options[:customer_id] = customer_id = r.params['cust']['contact']['id']
+            options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
+            options[:create_or_update_customer] = :update
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success?
+          end
 
-          customer_id = r.params['custId']
+          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+            add_wallet_details(doc, payment_method, customer_id, options)
+          end
 
-          store_payment_method_request = build_xml_payment_storage_request do |doc|
-            doc['v1'].cust do
-              add_customer_id(doc, customer_id)
-              doc['v1'].pmt do
-                doc['v1'].type 0 # add
-                add_credit_card(doc, payment_method)
-              end
-            end
+          response = r.process { commit(:store, store_payment_method_request) }
+          # merge the customer_id back in so callers can store it
+          response.params['custId'] = customer_id
+          response
+        end
+      end
+      # TODO: review this
+
+      def unstore(wallet_id, options = {})
+        customer_id = options[:customer_id]
+        options[:create_or_update_payment_method] = :delete
+        options[:payment_id] = wallet_id
+
+        MultiResponse.run do |r|
+          r.process { find_wallet(wallet_id) }
+          return r unless r.success? && r.params['cust']
+          wallet_details = Array.wrap(r.params['cust']['pmt']).find {|pmt| pmt['id'] == wallet_id}
+          name = r.params['cust']['contact']['fullName']
+          customer_id ||= r.params['cust']['contact']['id']
+
+          payment_method = build_payment_method_from_wallet_details(name, wallet_details)
+
+          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+            add_wallet_details(doc, payment_method, customer_id, options)
           end
 
           r.process { commit(:store, store_payment_method_request) }
         end
+      end
+
+      # non-standard gateway method
+      def store_customer(full_name, options)
+        request = build_xml_payment_storage_request do |doc|
+          store_customer_details(doc, full_name, options)
+        end
+
+        commit(:store, request)
       end
 
       def supports_scrubbing?
@@ -318,12 +434,13 @@ module ActiveMerchant #:nodoc:
           gsub(%r((<[^>]+sec>)[^<]+(<))i, '\1[FILTERED]\2').
           gsub(%r((<[^>]+id>)[^<]+(<))i, '\1[FILTERED]\2').
           gsub(%r((<[^>]+regKey>)[^<]+(<))i, '\1[FILTERED]\2').
-          gsub(%r((<[^>]+acctNr>)[^<]+(<))i, '\1[FILTERED]\2')
+          gsub(%r((<[^>]+trk1>)[^<]+(<))i, '\1[FILTERED]\2').
+          gsub(%r((<[^>]+trk2>)[^<]+(<))i, '\1[FILTERED]\2')
       end
 
       private
 
-      CURRENCY_CODES = Hash.new { |_h, k| raise ArgumentError.new("Unsupported currency: #{k}") }
+      CURRENCY_CODES = Hash.new{|h,k| raise ArgumentError.new('Unsupported currency: #{k}')}
       CURRENCY_CODES['USD'] = '840'
 
       def headers
@@ -352,8 +469,8 @@ module ActiveMerchant #:nodoc:
           response,
           error_code: error_code_from(succeeded, response),
           authorization: authorization_from(action, response),
-          avs_result: AVSResult.new(code: response['avsRslt']),
-          cvv_result: CVVResult.new(response['secRslt']),
+          avs_result: avs_from(response),
+          cvv_result: cvv_from(response),
           test: test?
         )
       end
@@ -363,31 +480,38 @@ module ActiveMerchant #:nodoc:
       end
 
       def parse(xml)
-        response = {}
         doc = Nokogiri::XML(xml).remove_namespaces!
 
-        doc.css('Envelope Body *').each do |node|
-          # node.name is more readable, but uniq_name is occasionally necessary
-          uniq_name = [node.parent.name, node.name].join('_')
-          response[uniq_name] = node.text
-          response[node.name] = node.text
+        # normalize the response body so we don't have to know the name of the
+        # root element
+        body = begin
+          doc.at_xpath('/Envelope/Body').children.first.children.to_xml
+        rescue NoMethodError
+          # if their API has an error it responds with HTML :rolleyes:
+          doc.to_xml
         end
+        new_response_body = <<-XML
+        <root>
+        #{body}
+        </root>
+        XML
 
-        response
+        Hash.from_xml(new_response_body)['root']
       end
 
       def success_from(response)
+        return unless response
+
         fault = response['Fault']
         approved_transaction = APPROVAL_CODES.include?(response['rspCode'])
-        found_contact = response['FndRecurrProfResponse']
+        found_contact = response['FndRecurrProfResponse'] || response['cust']
 
         return !fault && (approved_transaction || found_contact)
       end
 
       def error_code_from(succeeded, response)
         return if succeeded
-
-        response['errorCode'] || response['rspCode']
+        response['detail'].try(:[], 'SystemFault').try(:[], 'errorCode') || response['errorCode'] || response['rspCode']
       end
 
       def message_from(succeeded, response)
@@ -399,7 +523,7 @@ module ActiveMerchant #:nodoc:
 
           message = RESPONSE_MESSAGES[code]
           extended = EXTENDED_RESPONSE_MESSAGES[extended_code]
-          ach_response = response['achResponse']
+          ach_response = response.try(:[], 'achResponse').try(:[], 'Message')
 
           [message, extended, ach_response].compact.join('. ')
         else
@@ -408,7 +532,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorization_from(action, response)
-        authorization = response['tranNr'] || response['pmtId']
+        authorization = response['tranData'].try(:[], 'tranNr') || response['tranNr'] || response['pmtId']
 
         # guard so we don't return something like "purchase|"
         return unless authorization
@@ -416,7 +540,27 @@ module ActiveMerchant #:nodoc:
         [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
       end
 
+      def avs_from(response)
+        if response['authRsp']
+          AVSResult.new(code: response['authRsp']['avsRslt'])
+        elsif response['avsRslt']
+          AVSResult.new(code: response['avsRslt'])
+        end
+      end
+
+      def cvv_from(response)
+        if response['authRsp']
+          CVVResult.new(response['authRsp']['secRslt'])
+        elsif response['secRslt']
+          CVVResult.new(response['secRslt'])
+        end
+      end
+
       # -- helper methods ----------------------------------------------------
+      def payment_model?(payment)
+        payment.is_a?(Model)
+      end
+
       def credit_card?(payment_method)
         payment_method.respond_to?(:verification_value)
       end
@@ -429,23 +573,88 @@ module ActiveMerchant #:nodoc:
         authorization.split(AUTHORIZATION_FIELD_SEPARATOR)
       end
 
-      def void_type(action)
-        action == 'purchase_echeck' ? :void_echeck : :"void_#{action}"
+      def void_type(action, original_payment_method = nil)
+        if action.to_sym == :wallet_sale && original_payment_method
+          action = purchase_type original_payment_method
+        elsif action.to_sym == :purchase_echeck
+          action = :echeck
+        end
+
+        :'void_#{action}'
       end
 
-      def refund_type(action)
-        action == 'purchase_echeck' ? :refund_echeck : :refund
+      def refund_type(action, original_payment_method = nil)
+        if action.to_sym == :wallet_sale && original_payment_method
+          action = purchase_type original_payment_method
+          :'refund_#{action}'
+        elsif action.to_sym == :purchase_echeck
+          :refund_echeck
+        else
+          :refund
+        end
+      end
+
+      def purchase_type(payment_method)
+        case payment_method
+        when CreditCard
+          :purchase
+        when Check
+          :ach_debit
+        else
+          raise 'Unknown payment method #{payment_method.class.name}'
+        end
+      end
+
+      def product_type(payment_method)
+        case payment_method
+        when CreditCard
+          5
+        when Check
+          4
+        else
+          raise 'Unknown payment method #{payment_method.class.name}'
+        end
+      end
+
+      def industry_code_from(source)
+        PaymentSources::CC[source]
+      end
+
+      def secc_code_from(source)
+        PaymentSources::ACH[source]
+      end
+
+      def build_payment_method_from_wallet_details(name, wallet_details)
+        payment_method = if wallet_details['ach']
+          ::ActiveMerchant::Billing::Check.new({
+            name: name,
+            bank_name: wallet_details['ach']['bankName'],
+            routing_number: wallet_details['ach']['bankRtNr'],
+            account_number: wallet_details['ach']['acctNr'],
+            account_type: wallet_details['ach']['acctType'] == '0' ? 'checking' : 'savings'
+          })
+        elsif wallet_details['card']
+          ::ActiveMerchant::Billing::CreditCard.new({
+            name: name,
+            number: wallet_details['card']['pan'],
+            year: wallet_details['card']['xprDt'].slice(0,2),
+            month: wallet_details['card']['xprDt'].slice(2,2),
+            verification_value: '123'
+          })
+        end
+
+        payment_method
       end
 
       # -- request methods ---------------------------------------------------
-      def build_xml_transaction_request
-        build_xml_request('SendTranRequest') do |doc|
+      def build_xml_transaction_request(merchant_product_type = nil)
+        build_xml_request('SendTranRequest', merchant_product_type) do |doc|
           yield doc
         end
       end
 
-      def build_xml_payment_storage_request
-        build_xml_request('UpdtRecurrProfRequest') do |doc|
+      def build_xml_payment_storage_request(merchant_product_type = nil)
+        build_xml_request('UpdtRecurrProfRequest', merchant_product_type) do |doc|
           yield doc
         end
       end
@@ -468,12 +677,23 @@ module ActiveMerchant #:nodoc:
           xml['soapenv'].Envelope('xmlns:soapenv' => SOAPENV_NAMESPACE) do
             xml['soapenv'].Body do
               xml['v1'].send(wrapper, 'xmlns:v1' => V1_NAMESPACE) do
-                add_merchant(xml)
+                add_merchant(xml, merchant_product_type)
                 yield(xml)
               end
             end
           end
         end.doc.root.to_xml
+      end
+
+      def find_wallet(wallet_id)
+        request = build_xml_payment_search_request do |doc|
+          doc['v1'].type 1 # recurring
+          doc['v1'].pmtCrta {
+            doc['v1'].pmtId wallet_id
+          }
+        end
+
+        commit(:store, request)
       end
 
       def add_transaction_code_to_request(request, action)
@@ -500,18 +720,35 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_order_number(doc, options)
-        return unless options[:order_id]
+        return unless options[:order_id] || options[:merchant_order_id]
 
         doc['v1'].authReq {
-          doc['v1'].ordNr options[:order_id]
+          doc['v1'].ordNr options[:order_id] if options[:order_id]
+          if options[:merchant_order_id]
+            doc['v1'].purcCard {
+              doc['v1'].mercOrdNr options[:merchant_order_id]
+            }
+          end
         }
       end
 
-      def add_credit_card(doc, payment_method)
-        doc['v1'].card {
-          doc['v1'].pan payment_method.number
-          doc['v1'].sec payment_method.verification_value if payment_method.verification_value?
-          doc['v1'].xprDt expiration_date(payment_method)
+      def add_credit_card(doc, payment_method, options = {})
+        doc['v1'].card do
+          if payment_method.track_data.present?
+            add_swipe_data doc, payment_method.track_data
+          else
+            doc['v1'].pan options[:pmt_card_pan] || payment_method.number
+            doc['v1'].sec payment_method.verification_value if payment_method.verification_value
+            doc['v1'].xprDt expiration_date(payment_method)
+          end
+        end
+      end
+
+      def add_tax_fields(doc, options)
+        return unless options[:tax_idcr] || options[:tax_amt]
+        doc['v1'].tax {
+          doc['v1'].idcr options[:tax_idcr] if options[:tax_idcr]
+          doc['v1'].amt  options[:tax_amt]  if options[:tax_amt]
         }
       end
 
@@ -521,6 +758,54 @@ module ActiveMerchant #:nodoc:
           doc['v1'].acctNr payment_method.account_number
         }
       end
+
+      # TODO: start
+      def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil, options: {})
+        case payment_method
+        when CreditCard
+          add_credit_card doc, payment_method, options
+        when Check
+          add_ach doc, payment_method, ach_param, secc_code: secc_code_from(source)
+        else
+          raise 'Unknown payment method type #{payment_method.class.name}'
+        end
+      end
+
+      def add_ach(doc, payment_method, ach_param, secc_code: nil)
+        account_type = case payment_method.account_type
+        when 'checking'
+          0
+        when 'savings'
+          1
+        end
+
+        # because the parameter has to be named differently based upon what kind of request you're sending >:
+        doc['v1'].public_send(ach_param) {
+          doc['v1'].bankRtNr payment_method.routing_number
+          doc['v1'].bankName payment_method.bank_name
+          doc['v1'].acctNr payment_method.account_number
+          doc['v1'].acctType account_type
+          doc['v1'].seccCode secc_code if secc_code
+        }
+      end
+
+      def add_industry_code(doc, source)
+        industry_code = industry_code_from(source)
+        doc['v1'].indCode industry_code if industry_code
+      end
+
+      def add_swipe_data(doc, track_data)
+        tracks = track_data.split(';')
+        track1 = tracks[0]
+
+        # Starting and ending sentinels must be removed. For track 1, this includes the “%” and “?” symbols.
+        # We specifically inspect the start and end sentinals because there is
+        # so much variance in track data. Blindly stripping them is a bad idea
+        track1 = track1[1..-1] if track1.first == '%'
+        track1 = track1.chop if track1.last == '?'
+        doc['v1'].trk1 track1
+      end
+      # TODO: end
 
       def expiration_date(payment_method)
         yy = format(payment_method.year, :two_digits)
@@ -536,6 +821,9 @@ module ActiveMerchant #:nodoc:
 
       def add_contact(doc, fullname, options)
         doc['v1'].contact do
+          if options[:create_or_update_customer] == :update
+            doc['v1'].id options[:customer_id]
+          end
           doc['v1'].fullName fullname unless fullname.blank?
           doc['v1'].coName options[:company_name] if options[:company_name]
           doc['v1'].title options[:title] if options[:title]
@@ -587,12 +875,41 @@ module ActiveMerchant #:nodoc:
       end
 
       def store_customer_details(doc, fullname, options)
+        customer_update_type = 0 # add
+        if options[:create_or_update_customer] == :update
+          customer_update_type = 1
+        end
+
         options[:contact_type] = 1 # recurring
         options[:contact_stat] = 1 # active
 
         doc['v1'].cust do
-          doc['v1'].type 0 # add
+          doc['v1'].type customer_update_type
           add_contact(doc, fullname, options)
+        end
+      end
+
+      def add_wallet_details(doc, payment_method, customer_id, options)
+        wallet_update_type = 0 # add
+        payment_status_type = 1 # active
+        case options[:create_or_update_payment_method]
+        when :update
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+        when :delete
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+          payment_status_type = 0 # inactive
+        end
+
+        doc['v1'].cust do
+          add_customer_id(doc, customer_id)
+          doc['v1'].pmt do
+            doc['v1'].id wallet_id if wallet_id
+            doc['v1'].type wallet_update_type
+            add_payment_method(doc, payment_method, ach_param: 'ach', options: options)
+            doc['v1'].status payment_status_type
+          end
         end
       end
 
@@ -602,9 +919,12 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def add_wallet_id(doc, wallet_id)
+      def add_wallet_id(doc, wallet_id, source: nil)
+        secc_code = secc_code_from(source)
+
         doc['v1'].recurMan do
           doc['v1'].id wallet_id
+          doc['v1'].seccCode secc_code if secc_code
         end
       end
     end
