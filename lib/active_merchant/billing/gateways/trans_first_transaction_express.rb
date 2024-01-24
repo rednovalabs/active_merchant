@@ -671,9 +671,12 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def add_wallet_id(doc, wallet_id)
+      def add_wallet_id(doc, wallet_id, source: nil)
+        secc_code = secc_code_from(source)
+
         doc['v1'].recurMan do
           doc['v1'].id wallet_id
+          doc['v1'].seccCode secc_code if secc_code
         end
       end
     end
