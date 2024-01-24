@@ -605,6 +605,10 @@ module ActiveMerchant #:nodoc:
 
       def add_contact(doc, fullname, options)
         doc['v1'].contact do
+          if options[:create_or_update_customer] == :update
+            doc['v1'].id options[:customer_id]
+          end
+
           doc['v1'].fullName fullname unless fullname.blank?
           doc['v1'].coName options[:company_name] if options[:company_name]
           doc['v1'].title options[:title] if options[:title]
