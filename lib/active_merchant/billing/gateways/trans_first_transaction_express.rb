@@ -656,11 +656,16 @@ module ActiveMerchant #:nodoc:
       end
 
       def store_customer_details(doc, fullname, options)
+        customer_update_type = 0 # add
+        if options[:create_or_update_customer] == :update
+          customer_update_type = 1
+        end
+
         options[:contact_type] = 1 # recurring
         options[:contact_stat] = 1 # active
 
         doc['v1'].cust do
-          doc['v1'].type 0 # add
+          doc['v1'].type customer_update_type
           add_contact(doc, fullname, options)
         end
       end

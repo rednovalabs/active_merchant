@@ -889,6 +889,7 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      # TODO
       def add_wallet_details(doc, payment_method, customer_id, options)
         wallet_update_type = 0 # add
         payment_status_type = 1 # active
@@ -919,14 +920,14 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def add_wallet_id(doc, wallet_id, source: nil)
-        secc_code = secc_code_from(source)
+      # def add_wallet_id(doc, wallet_id, source: nil)
+      #   secc_code = secc_code_from(source)
 
-        doc['v1'].recurMan do
-          doc['v1'].id wallet_id
-          doc['v1'].seccCode secc_code if secc_code
-        end
-      end
+      #   doc['v1'].recurMan do
+      #     doc['v1'].id wallet_id
+      #     doc['v1'].seccCode secc_code if secc_code
+      #   end
+      # end
     end
   end
 end
