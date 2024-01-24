@@ -263,6 +263,7 @@ module ActiveMerchant #:nodoc:
             add_credit_card(doc, payment_method)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
           end
         elsif echeck?(payment_method)
@@ -271,6 +272,7 @@ module ActiveMerchant #:nodoc:
             add_echeck(doc, payment_method)
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
           end
         else
@@ -278,6 +280,7 @@ module ActiveMerchant #:nodoc:
           wallet_id = split_authorization(payment_method).last
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
+            add_industry_code(doc, options[:payment_source])
             add_wallet_id(doc, wallet_id)
           end
         end
@@ -589,6 +592,15 @@ module ActiveMerchant #:nodoc:
           doc['v1'].bankRtNr payment_method.routing_number
           doc['v1'].acctNr payment_method.account_number
         }
+      end
+
+      def industry_code_from(source)
+        PaymentSources::CC[source]
+      end
+
+      def add_industry_code(doc, source)
+        industry_code = industry_code_from(source)
+        doc['v1'].indCode industry_code if industry_code
       end
 
       def expiration_date(payment_method)
