@@ -283,6 +283,7 @@ module ActiveMerchant #:nodoc:
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
+            add_order_number(doc, options)
             add_tax_fields(doc, options)
             add_wallet_id(doc, wallet_id)
           end
