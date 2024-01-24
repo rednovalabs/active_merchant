@@ -265,6 +265,7 @@ module ActiveMerchant #:nodoc:
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
+            add_tax_fields(doc, options)
           end
         elsif echeck?(payment_method)
           action = :purchase_echeck
@@ -274,6 +275,7 @@ module ActiveMerchant #:nodoc:
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
+            add_tax_fields(doc, options)
           end
         else
           action = :wallet_sale
@@ -281,6 +283,7 @@ module ActiveMerchant #:nodoc:
           request = build_xml_transaction_request do |doc|
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
+            add_tax_fields(doc, options)
             add_wallet_id(doc, wallet_id)
           end
         end
@@ -601,6 +604,14 @@ module ActiveMerchant #:nodoc:
             doc['v1'].xprDt expiration_date(payment_method)
           end
         end
+      end
+
+      def add_tax_fields(doc, options)
+        return unless options[:tax_idcr] || options[:tax_amt]
+        doc['v1'].tax {
+          doc['v1'].idcr options[:tax_idcr] if options[:tax_idcr]
+          doc['v1'].amt  options[:tax_amt]  if options[:tax_amt]
+        }
       end
 
       def add_echeck(doc, payment_method)
