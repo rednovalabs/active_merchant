@@ -256,54 +256,54 @@ module ActiveMerchant #:nodoc:
       #   super
       # end
 
-      def purchase(amount, payment_method, options = {})
-        if payment_model?(payment_method)
-          action = purchase_type(payment_method)
-          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
-            # infuriatingly, it matters where in the XML the payment method is located
-            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(CreditCard)
-            add_contact(doc, payment_method.name, options)
-            add_amount(doc, amount)
-            add_industry_code(doc, options[:payment_source])
-            add_order_number(doc, options)
-            add_tax_fields(doc, options)
-            # infuriatingly, it matters where in the XML the payment method is located
-            add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
-          end
-        else
-          action = :wallet_sale
-          wallet_id = split_authorization(payment_method).last
-          request = build_xml_transaction_request do |doc|
-            add_amount(doc, amount)
-            add_industry_code(doc, options[:payment_source])
-            add_order_number(doc, options)
-            add_tax_fields(doc, options)
-            add_wallet_id(doc, wallet_id, source: options[:payment_source])
-          end
-        end
+      # def purchase(amount, payment_method, options = {})
+      #   if payment_model?(payment_method)
+      #     action = purchase_type(payment_method)
+      #     request = build_xml_transaction_request(product_type(payment_method)) do |doc|
+      #       # infuriatingly, it matters where in the XML the payment method is located
+      #       add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(CreditCard)
+      #       add_contact(doc, payment_method.name, options)
+      #       add_amount(doc, amount)
+      #       add_industry_code(doc, options[:payment_source])
+      #       add_order_number(doc, options)
+      #       add_tax_fields(doc, options)
+      #       # infuriatingly, it matters where in the XML the payment method is located
+      #       add_payment_method(doc, payment_method, source: options[:payment_source]) if payment_method.is_a?(Check)
+      #     end
+      #   else
+      #     action = :wallet_sale
+      #     wallet_id = split_authorization(payment_method).last
+      #     request = build_xml_transaction_request do |doc|
+      #       add_amount(doc, amount)
+      #       add_industry_code(doc, options[:payment_source])
+      #       add_order_number(doc, options)
+      #       add_tax_fields(doc, options)
+      #       add_wallet_id(doc, wallet_id, source: options[:payment_source])
+      #     end
+      #   end
 
-        commit(action, request)
-      end
+      #   commit(action, request)
+      # end
 
-      def authorize(amount, payment_method, options = {})
-        if payment_model?(payment_method)
-          request = build_xml_transaction_request(product_type(payment_method)) do |doc|
-            add_payment_method(doc, payment_method, source: options[:payment_source])
-            add_contact(doc, payment_method.name, options)
-            add_amount(doc, amount)
-            add_industry_code(doc, options[:payment_source])
-          end
-        else
-          wallet_id = split_authorization(payment_method).last
-          request = build_xml_transaction_request do |doc|
-            add_amount(doc, amount)
-            add_industry_code(doc, options[:payment_source])
-            add_wallet_id(doc, wallet_id, source: options[:payment_source])
-          end
-        end
+      # def authorize(amount, payment_method, options = {})
+      #   if payment_model?(payment_method)
+      #     request = build_xml_transaction_request(product_type(payment_method)) do |doc|
+      #       add_payment_method(doc, payment_method, source: options[:payment_source])
+      #       add_contact(doc, payment_method.name, options)
+      #       add_amount(doc, amount)
+      #       add_industry_code(doc, options[:payment_source])
+      #     end
+      #   else
+      #     wallet_id = split_authorization(payment_method).last
+      #     request = build_xml_transaction_request do |doc|
+      #       add_amount(doc, amount)
+      #       add_industry_code(doc, options[:payment_source])
+      #       add_wallet_id(doc, wallet_id, source: options[:payment_source])
+      #     end
+      #   end
 
-        commit(:authorize, request)
-      end
+      #   commit(:authorize, request)
+      # end
 
       # def capture(amount, authorization, options = {})
       #   transaction_id = split_authorization(authorization)[1]
