@@ -370,27 +370,35 @@ module ActiveMerchant #:nodoc:
       end
 
       def store(payment_method, options = {})
-        store_customer_request = build_xml_payment_storage_request do |doc|
-          store_customer_details(doc, payment_method.name, options)
-        end
+        customer_id = options[:customer_id]
+        wallet_id = options[:payment_id]
+
+        store_new_customer = !customer_id && !wallet_id
+        update_wallet = options[:create_or_update_payment_method] == :update && wallet_id
 
         MultiResponse.run do |r|
-          r.process { commit(:store, store_customer_request) }
-          return r unless r.success? && r.params['custId']
-
-          customer_id = r.params['custId']
-
-          store_payment_method_request = build_xml_payment_storage_request do |doc|
-            doc['v1'].cust do
-              add_customer_id(doc, customer_id)
-              doc['v1'].pmt do
-                doc['v1'].type 0 # add
-                add_credit_card(doc, payment_method)
-              end
-            end
+          if store_new_customer
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success? && r.params['custId']
+            customer_id = r.params['custId']
+          elsif update_wallet
+            r.process { find_wallet(wallet_id) }
+            return r unless r.success? && r.params['cust']
+            options[:customer_id] = customer_id = r.params['cust']['contact']['id']
+            options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
+            options[:create_or_update_customer] = :update
+            r.process { store_customer(payment_method.name, options) }
+            return r unless r.success?
           end
 
-          r.process { commit(:store, store_payment_method_request) }
+          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+            add_wallet_details(doc, payment_method, customer_id, options)
+          end
+
+          response = r.process { commit(:store, store_payment_method_request) }
+          # merge the customer_id back in so callers can store it
+          response.params['custId'] = customer_id
+          response
         end
       end
 
@@ -758,6 +766,49 @@ module ActiveMerchant #:nodoc:
         doc['v1'].cust do
           doc['v1'].type customer_update_type
           add_contact(doc, fullname, options)
+        end
+      end
+
+      def store_customer(full_name, options)
+        request = build_xml_payment_storage_request do |doc|
+          store_customer_details(doc, full_name, options)
+        end
+
+        commit(:store, request)
+      end
+
+      def find_wallet(wallet_id)
+        request = build_xml_payment_search_request do |doc|
+          doc['v1'].type 1 # recurring
+          doc['v1'].pmtCrta {
+            doc['v1'].pmtId wallet_id
+          }
+        end
+
+        commit(:store, request)
+      end
+
+      def add_wallet_details(doc, payment_method, customer_id, options)
+        wallet_update_type = 0 # add
+        payment_status_type = 1 # active
+        case options[:create_or_update_payment_method]
+        when :update
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+        when :delete
+          wallet_update_type = 1
+          wallet_id = options[:payment_id]
+          payment_status_type = 0 # inactive
+        end
+
+        doc['v1'].cust do
+          add_customer_id(doc, customer_id)
+          doc['v1'].pmt do
+            doc['v1'].id wallet_id if wallet_id
+            doc['v1'].type wallet_update_type
+            add_payment_method(doc, payment_method, ach_param: 'ach', options: options)
+            doc['v1'].status payment_status_type
+          end
         end
       end
 
