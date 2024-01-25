@@ -315,30 +315,30 @@ module ActiveMerchant #:nodoc:
       #   commit(:capture, request)
       # end
 
-      def void(authorization, options = {})
-        action, transaction_id = split_authorization(authorization)
+      # def void(authorization, options = {})
+      #   action, transaction_id = split_authorization(authorization)
 
-        request = build_xml_transaction_request do |doc|
-          add_original_transaction_data(doc, transaction_id)
-        end
+      #   request = build_xml_transaction_request do |doc|
+      #     add_original_transaction_data(doc, transaction_id)
+      #   end
 
-        commit(void_type(action, options[:original_payment_method]), request)
-      end
+      #   commit(void_type(action, options[:original_payment_method]), request)
+      # end
 
-      def refund(amount, authorization, options = {})
-        action, transaction_id = split_authorization(authorization)
+      # def refund(amount, authorization, options = {})
+      #   action, transaction_id = split_authorization(authorization)
 
-        original_payment_method = options[:original_payment_method]
-        needs_amount = !original_payment_method || original_payment_method.is_a?(CreditCard)
+      #   original_payment_method = options[:original_payment_method]
+      #   needs_amount = !original_payment_method || original_payment_method.is_a?(CreditCard)
 
-        request = build_xml_transaction_request do |doc|
-          add_amount(doc, amount) if needs_amount
-          add_original_transaction_data(doc, transaction_id)
-          add_order_number(doc, options)
-        end
+      #   request = build_xml_transaction_request do |doc|
+      #     add_amount(doc, amount) if needs_amount
+      #     add_original_transaction_data(doc, transaction_id)
+      #     add_order_number(doc, options)
+      #   end
 
-        commit(refund_type(action, original_payment_method), request)
-      end
+      #   commit(refund_type(action, original_payment_method), request)
+      # end
 
       # def credit(amount, payment_method, options = {})
       #   request = build_xml_transaction_request do |doc|
@@ -391,6 +391,7 @@ module ActiveMerchant #:nodoc:
         end
       end
 
+      # TODO: This method is not used anywhere
       # def unstore(wallet_id, options = {})
       #   customer_id = options[:customer_id]
       #   options[:create_or_update_payment_method] = :delete
@@ -571,48 +572,54 @@ module ActiveMerchant #:nodoc:
       #   authorization.split(AUTHORIZATION_FIELD_SEPARATOR)
       # end
 
-      def void_type(action, original_payment_method = nil)
-        if action.to_sym == :wallet_sale && original_payment_method
-          action = purchase_type original_payment_method
-        elsif action.to_sym == :purchase_echeck
-          action = :echeck
-        end
+      # TODO: doent seem like we need to integrate this into `void`
+      # def void_type(action, original_payment_method = nil)
+      #   if action.to_sym == :wallet_sale && original_payment_method
+      #     action = purchase_type original_payment_method
+      #   elsif action.to_sym == :purchase_echeck
+      #     action = :echeck
+      #   end
 
-        :'void_#{action}'
-      end
+      #   :'void_#{action}'
+      # end
 
-      def refund_type(action, original_payment_method = nil)
-        if action.to_sym == :wallet_sale && original_payment_method
-          action = purchase_type original_payment_method
-          :'refund_#{action}'
-        elsif action.to_sym == :purchase_echeck
-          :refund_echeck
-        else
-          :refund
-        end
-      end
+      # TODO: doent seem like we need to integrate this into `refund`
+      # def refund_type(action, original_payment_method = nil)
+      #   if action.to_sym == :wallet_sale && original_payment_method
+      #     action = purchase_type original_payment_method
+      #     :'refund_#{action}'
+      #   elsif action.to_sym == :purchase_echeck
+      #     :refund_echeck
+      #   else
+      #     :refund
+      #   end
+      # end
 
-      def purchase_type(payment_method)
-        case payment_method
-        when CreditCard
-          :purchase
-        when Check
-          :ach_debit
-        else
-          raise 'Unknown payment method #{payment_method.class.name}'
-        end
-      end
+      # TODO: doesnt seem like we need this method as a result of
+      # `void_type`, `refund_type`, or `purchase`
+      # def purchase_type(payment_method)
+      #   case payment_method
+      #   when CreditCard
+      #     :purchase
+      #   when Check
+      #     :ach_debit
+      #   else
+      #     raise 'Unknown payment method #{payment_method.class.name}'
+      #   end
+      # end
 
-      def product_type(payment_method)
-        case payment_method
-        when CreditCard
-          5
-        when Check
-          4
-        else
-          raise 'Unknown payment method #{payment_method.class.name}'
-        end
-      end
+      # TODO: doesnt seem like we need this method since its only
+      # used by the other unused methods
+      # def product_type(payment_method)
+      #   case payment_method
+      #   when CreditCard
+      #     5
+      #   when Check
+      #     4
+      #   else
+      #     raise 'Unknown payment method #{payment_method.class.name}'
+      #   end
+      # end
 
       # def industry_code_from(source)
       #   PaymentSources::CC[source]
