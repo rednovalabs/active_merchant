@@ -516,14 +516,14 @@ module ActiveMerchant #:nodoc:
       end
 
       # -- request methods ---------------------------------------------------
-      def build_xml_transaction_request
-        build_xml_request('SendTranRequest') do |doc|
+      def build_xml_transaction_request(merchant_product_type = nil)
+        build_xml_request('SendTranRequest', merchant_product_type) do |doc|
           yield doc
         end
       end
 
-      def build_xml_payment_storage_request
-        build_xml_request('UpdtRecurrProfRequest') do |doc|
+      def build_xml_payment_storage_request(merchant_product_type = nil)
+        build_xml_request('UpdtRecurrProfRequest', merchant_product_type) do |doc|
           yield doc
         end
       end

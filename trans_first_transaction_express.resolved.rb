@@ -645,17 +645,17 @@ module ActiveMerchant #:nodoc:
       end
 
       # -- request methods ---------------------------------------------------
-      def build_xml_transaction_request(merchant_product_type = nil)
-        build_xml_request('SendTranRequest', merchant_product_type) do |doc|
-          yield doc
-        end
-      end
+      # def build_xml_transaction_request(merchant_product_type = nil)
+      #   build_xml_request('SendTranRequest', merchant_product_type) do |doc|
+      #     yield doc
+      #   end
+      # end
 
-      def build_xml_payment_storage_request(merchant_product_type = nil)
-        build_xml_request('UpdtRecurrProfRequest', merchant_product_type) do |doc|
-          yield doc
-        end
-      end
+      # def build_xml_payment_storage_request(merchant_product_type = nil)
+      #   build_xml_request('UpdtRecurrProfRequest', merchant_product_type) do |doc|
+      #     yield doc
+      #   end
+      # end
 
       # def build_xml_payment_update_request
       #   merchant_product_type = 5 # credit card
@@ -871,20 +871,20 @@ module ActiveMerchant #:nodoc:
       #   end
       # end
 
-      def store_customer_details(doc, fullname, options)
-        customer_update_type = 0 # add
-        if options[:create_or_update_customer] == :update
-          customer_update_type = 1
-        end
+      # def store_customer_details(doc, fullname, options)
+      #   customer_update_type = 0 # add
+      #   if options[:create_or_update_customer] == :update
+      #     customer_update_type = 1
+      #   end
 
-        options[:contact_type] = 1 # recurring
-        options[:contact_stat] = 1 # active
+      #   options[:contact_type] = 1 # recurring
+      #   options[:contact_stat] = 1 # active
 
-        doc['v1'].cust do
-          doc['v1'].type customer_update_type
-          add_contact(doc, fullname, options)
-        end
-      end
+      #   doc['v1'].cust do
+      #     doc['v1'].type customer_update_type
+      #     add_contact(doc, fullname, options)
+      #   end
+      # end
 
       # TODO
       def add_wallet_details(doc, payment_method, customer_id, options)
