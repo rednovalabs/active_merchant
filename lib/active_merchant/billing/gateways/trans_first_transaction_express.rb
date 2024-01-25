@@ -352,7 +352,7 @@ module ActiveMerchant #:nodoc:
 
       def verify(credit_card, options = {})
         request = build_xml_transaction_request do |doc|
-          add_credit_card(doc, credit_card)
+          add_credit_card(doc, credit_card, options)
           add_contact(doc, credit_card.name, options)
         end
 
@@ -620,12 +620,12 @@ module ActiveMerchant #:nodoc:
         doc["v1"].trk1 track1
       end
 
-      def add_credit_card(doc, payment_method)
+      def add_credit_card(doc, payment_method, options = {})
         doc['v1'].card do
           if payment_method.track_data.present?
             add_swipe_data doc, payment_method.track_data
           else
-            doc['v1'].pan payment_method.number
+            doc['v1'].pan options[:pmt_card_pan] || payment_method.number
             doc['v1'].sec payment_method.verification_value if payment_method.verification_value?
             doc['v1'].xprDt expiration_date(payment_method)
           end

@@ -349,14 +349,14 @@ module ActiveMerchant #:nodoc:
       #   commit(:credit, request)
       # end
 
-      def verify(credit_card, options = {})
-        request = build_xml_transaction_request do |doc|
-          add_payment_method(doc, credit_card)
-          add_contact(doc, credit_card.name, options)
-        end
+      # def verify(credit_card, options = {})
+      #   request = build_xml_transaction_request do |doc|
+      #     add_payment_method(doc, credit_card)
+      #     add_contact(doc, credit_card.name, options)
+      #   end
 
-        commit(:verify, request)
-      end
+      #   commit(:verify, request)
+      # end
 
       def store(payment_method, options = {})
         customer_id = options[:customer_id]
@@ -391,27 +391,27 @@ module ActiveMerchant #:nodoc:
         end
       end
 
-      def unstore(wallet_id, options = {})
-        customer_id = options[:customer_id]
-        options[:create_or_update_payment_method] = :delete
-        options[:payment_id] = wallet_id
+      # def unstore(wallet_id, options = {})
+      #   customer_id = options[:customer_id]
+      #   options[:create_or_update_payment_method] = :delete
+      #   options[:payment_id] = wallet_id
 
-        MultiResponse.run do |r|
-          r.process { find_wallet(wallet_id) }
-          return r unless r.success? && r.params['cust']
-          wallet_details = Array.wrap(r.params['cust']['pmt']).find {|pmt| pmt['id'] == wallet_id}
-          name = r.params['cust']['contact']['fullName']
-          customer_id ||= r.params['cust']['contact']['id']
+      #   MultiResponse.run do |r|
+      #     r.process { find_wallet(wallet_id) }
+      #     return r unless r.success? && r.params['cust']
+      #     wallet_details = Array.wrap(r.params['cust']['pmt']).find {|pmt| pmt['id'] == wallet_id}
+      #     name = r.params['cust']['contact']['fullName']
+      #     customer_id ||= r.params['cust']['contact']['id']
 
-          payment_method = build_payment_method_from_wallet_details(name, wallet_details)
+      #     payment_method = build_payment_method_from_wallet_details(name, wallet_details)
 
-          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
-            add_wallet_details(doc, payment_method, customer_id, options)
-          end
+      #     store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+      #       add_wallet_details(doc, payment_method, customer_id, options)
+      #     end
 
-          r.process { commit(:store, store_payment_method_request) }
-        end
-      end
+      #     r.process { commit(:store, store_payment_method_request) }
+      #   end
+      # end
 
       # non-standard gateway method
       def store_customer(full_name, options)
@@ -447,55 +447,55 @@ module ActiveMerchant #:nodoc:
       #   }
       # end
 
-      def commit(action, request)
-        request = add_transaction_code_to_request(request, action)
+      # def commit(action, request)
+      #   request = add_transaction_code_to_request(request, action)
 
-        raw_response =
-          begin
-            ssl_post(url, request, headers)
-          rescue ActiveMerchant::ResponseError => e
-            e.response.body
-          end
+      #   raw_response =
+      #     begin
+      #       ssl_post(url, request, headers)
+      #     rescue ActiveMerchant::ResponseError => e
+      #       e.response.body
+      #     end
 
-        response = parse(raw_response)
+      #   response = parse(raw_response)
 
-        succeeded = success_from(response)
+      #   succeeded = success_from(response)
 
-        Response.new(
-          succeeded,
-          message_from(succeeded, response),
-          response,
-          error_code: error_code_from(succeeded, response),
-          authorization: authorization_from(action, response),
-          avs_result: avs_from(response),
-          cvv_result: cvv_from(response),
-          test: test?
-        )
-      end
+      #   Response.new(
+      #     succeeded,
+      #     message_from(succeeded, response),
+      #     response,
+      #     error_code: error_code_from(succeeded, response),
+      #     authorization: authorization_from(action, response),
+      #     avs_result: avs_from(response),
+      #     cvv_result: cvv_from(response),
+      #     test: test?
+      #   )
+      # end
 
       # def url
       #   test? ? test_url : live_url
       # end
 
-      def parse(xml)
-        doc = Nokogiri::XML(xml).remove_namespaces!
+      # def parse(xml)
+      #   doc = Nokogiri::XML(xml).remove_namespaces!
 
-        # normalize the response body so we don't have to know the name of the
-        # root element
-        body = begin
-          doc.at_xpath('/Envelope/Body').children.first.children.to_xml
-        rescue NoMethodError
-          # if their API has an error it responds with HTML :rolleyes:
-          doc.to_xml
-        end
-        new_response_body = <<-XML
-        <root>
-        #{body}
-        </root>
-        XML
+      #   # normalize the response body so we don't have to know the name of the
+      #   # root element
+      #   body = begin
+      #     doc.at_xpath('/Envelope/Body').children.first.children.to_xml
+      #   rescue NoMethodError
+      #     # if their API has an error it responds with HTML :rolleyes:
+      #     doc.to_xml
+      #   end
+      #   new_response_body = <<-XML
+      #   <root>
+      #   #{body}
+      #   </root>
+      #   XML
 
-        Hash.from_xml(new_response_body)['root']
-      end
+      #   Hash.from_xml(new_response_body)['root']
+      # end
 
       # def success_from(response)
       #   return unless response
