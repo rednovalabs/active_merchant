@@ -538,21 +538,21 @@ module ActiveMerchant #:nodoc:
       #   [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
       # end
 
-      def avs_from(response)
-        if response['authRsp']
-          AVSResult.new(code: response['authRsp']['avsRslt'])
-        elsif response['avsRslt']
-          AVSResult.new(code: response['avsRslt'])
-        end
-      end
+      # def avs_from(response)
+      #   if response['authRsp']
+      #     AVSResult.new(code: response['authRsp']['avsRslt'])
+      #   elsif response['avsRslt']
+      #     AVSResult.new(code: response['avsRslt'])
+      #   end
+      # end
 
-      def cvv_from(response)
-        if response['authRsp']
-          CVVResult.new(response['authRsp']['secRslt'])
-        elsif response['secRslt']
-          CVVResult.new(response['secRslt'])
-        end
-      end
+      # def cvv_from(response)
+      #   if response['authRsp']
+      #     CVVResult.new(response['authRsp']['secRslt'])
+      #   elsif response['secRslt']
+      #     CVVResult.new(response['secRslt'])
+      #   end
+      # end
 
       # -- helper methods ----------------------------------------------------
       def payment_model?(payment)

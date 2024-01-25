@@ -430,8 +430,8 @@ module ActiveMerchant #:nodoc:
           response,
           error_code: error_code_from(succeeded, response),
           authorization: authorization_from(action, response),
-          avs_result: AVSResult.new(code: response['avsRslt']),
-          cvv_result: CVVResult.new(response['secRslt']),
+          avs_result: avs_from(response),
+          cvv_result: cvv_from(response),
           test: test?
         )
       end
@@ -498,6 +498,18 @@ module ActiveMerchant #:nodoc:
         return unless authorization
 
         [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
+      end
+
+      def avs_from(response)
+        result = response['authRsp'].try(:[], 'avsRslt') || response['avsRslt']
+
+        AVSResult.new(code: result)
+      end
+
+      def cvv_from(response)
+        result = response['authRsp'].try(:[], 'secRslt') || response['secRslt']
+
+        CVVResult.new(result)
       end
 
       # -- helper methods ----------------------------------------------------
