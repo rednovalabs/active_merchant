@@ -285,7 +285,7 @@ module ActiveMerchant #:nodoc:
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
             add_tax_fields(doc, options)
-            add_wallet_id(doc, wallet_id)
+            add_wallet_id(doc, wallet_id, source: options[:payment_source])
           end
         end
 
@@ -546,7 +546,7 @@ module ActiveMerchant #:nodoc:
           xml['soapenv'].Envelope('xmlns:soapenv' => SOAPENV_NAMESPACE) do
             xml['soapenv'].Body do
               xml['v1'].send(wrapper, 'xmlns:v1' => V1_NAMESPACE) do
-                add_merchant(xml)
+                add_merchant(xml, merchant_product_type)
                 yield(xml)
               end
             end
@@ -725,6 +725,10 @@ module ActiveMerchant #:nodoc:
         doc['v1'].contact do
           doc['v1'].id customer_id
         end
+      end
+
+      def secc_code_from(source)
+        PaymentSources::ACH[source]
       end
 
       def add_wallet_id(doc, wallet_id, source: nil)
