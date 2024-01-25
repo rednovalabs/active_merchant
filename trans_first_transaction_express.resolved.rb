@@ -556,9 +556,10 @@ module ActiveMerchant #:nodoc:
       # end
 
       # -- helper methods ----------------------------------------------------
-      def payment_model?(payment)
-        payment.is_a?(Model)
-      end
+      # TODO: not used
+      # def payment_model?(payment)
+      #   payment.is_a?(Model)
+      # end
 
       # def credit_card?(payment_method)
       #   payment_method.respond_to?(:verification_value)
@@ -629,27 +630,28 @@ module ActiveMerchant #:nodoc:
       #   PaymentSources::ACH[source]
       # end
 
-      def build_payment_method_from_wallet_details(name, wallet_details)
-        payment_method = if wallet_details['ach']
-          ::ActiveMerchant::Billing::Check.new({
-            name: name,
-            bank_name: wallet_details['ach']['bankName'],
-            routing_number: wallet_details['ach']['bankRtNr'],
-            account_number: wallet_details['ach']['acctNr'],
-            account_type: wallet_details['ach']['acctType'] == '0' ? 'checking' : 'savings'
-          })
-        elsif wallet_details['card']
-          ::ActiveMerchant::Billing::CreditCard.new({
-            name: name,
-            number: wallet_details['card']['pan'],
-            year: wallet_details['card']['xprDt'].slice(0,2),
-            month: wallet_details['card']['xprDt'].slice(2,2),
-            verification_value: '123'
-          })
-        end
+      # TODO: not used since its part of the unused store method
+      # def build_payment_method_from_wallet_details(name, wallet_details)
+      #   payment_method = if wallet_details['ach']
+      #     ::ActiveMerchant::Billing::Check.new({
+      #       name: name,
+      #       bank_name: wallet_details['ach']['bankName'],
+      #       routing_number: wallet_details['ach']['bankRtNr'],
+      #       account_number: wallet_details['ach']['acctNr'],
+      #       account_type: wallet_details['ach']['acctType'] == '0' ? 'checking' : 'savings'
+      #     })
+      #   elsif wallet_details['card']
+      #     ::ActiveMerchant::Billing::CreditCard.new({
+      #       name: name,
+      #       number: wallet_details['card']['pan'],
+      #       year: wallet_details['card']['xprDt'].slice(0,2),
+      #       month: wallet_details['card']['xprDt'].slice(2,2),
+      #       verification_value: '123'
+      #     })
+      #   end
 
-        payment_method
-      end
+      #   payment_method
+      # end
 
       # -- request methods ---------------------------------------------------
       # def build_xml_transaction_request(merchant_product_type = nil)
@@ -764,35 +766,37 @@ module ActiveMerchant #:nodoc:
       #   }
       # end
 
-      # TODO: start
-      def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil, options: {})
-        case payment_method
-        when CreditCard
-          add_credit_card doc, payment_method, options
-        when Check
-          add_ach doc, payment_method, ach_param, secc_code: secc_code_from(source)
-        else
-          raise 'Unknown payment method type #{payment_method.class.name}'
-        end
-      end
+      # TODO: doesnt seem like we need this method anymore since its
+      # been broken up in the newver version
+      # def add_payment_method(doc, payment_method, ach_param: 'achEcheck', source: nil, options: {})
+      #   case payment_method
+      #   when CreditCard
+      #     add_credit_card doc, payment_method, options
+      #   when Check
+      #     add_ach doc, payment_method, ach_param, secc_code: secc_code_from(source)
+      #   else
+      #     raise 'Unknown payment method type #{payment_method.class.name}'
+      #   end
+      # end
 
-      def add_ach(doc, payment_method, ach_param, secc_code: nil)
-        account_type = case payment_method.account_type
-        when 'checking'
-          0
-        when 'savings'
-          1
-        end
+      # TODO: this method has been merged into `add_echeck`
+      # def add_ach(doc, payment_method, ach_param, secc_code: nil)
+      #   account_type = case payment_method.account_type
+      #   when 'checking'
+      #     0
+      #   when 'savings'
+      #     1
+      #   end
 
-        # because the parameter has to be named differently based upon what kind of request you're sending >:
-        doc['v1'].public_send(ach_param) {
-          doc['v1'].bankRtNr payment_method.routing_number
-          doc['v1'].bankName payment_method.bank_name
-          doc['v1'].acctNr payment_method.account_number
-          doc['v1'].acctType account_type
-          doc['v1'].seccCode secc_code if secc_code
-        }
-      end
+      #   # because the parameter has to be named differently based upon what kind of request you're sending >:
+      #   doc['v1'].public_send(ach_param) {
+      #     doc['v1'].bankRtNr payment_method.routing_number
+      #     doc['v1'].bankName payment_method.bank_name
+      #     doc['v1'].acctNr payment_method.account_number
+      #     doc['v1'].acctType account_type
+      #     doc['v1'].seccCode secc_code if secc_code
+      #   }
+      # end
 
       # def add_industry_code(doc, source)
       #   industry_code = industry_code_from(source)

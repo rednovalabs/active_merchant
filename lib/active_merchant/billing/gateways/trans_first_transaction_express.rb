@@ -260,7 +260,7 @@ module ActiveMerchant #:nodoc:
         if credit_card?(payment_method)
           action = :purchase
           request = build_xml_transaction_request do |doc|
-            add_credit_card(doc, payment_method)
+            add_credit_card(doc, payment_method, source: options[:payment_source])
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
@@ -275,7 +275,7 @@ module ActiveMerchant #:nodoc:
             add_industry_code(doc, options[:payment_source])
             add_order_number(doc, options)
             add_tax_fields(doc, options)
-            add_echeck(doc, payment_method)
+            add_echeck(doc, payment_method, source: options[:payment_source])
           end
         else
           action = :wallet_sale
@@ -295,7 +295,7 @@ module ActiveMerchant #:nodoc:
       def authorize(amount, payment_method, options = {})
         if credit_card?(payment_method)
           request = build_xml_transaction_request do |doc|
-            add_credit_card(doc, payment_method)
+            add_credit_card(doc, payment_method, source: options[:payment_source])
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
@@ -305,7 +305,7 @@ module ActiveMerchant #:nodoc:
             add_contact(doc, payment_method.name, options)
             add_amount(doc, amount)
             add_industry_code(doc, options[:payment_source])
-            add_echeck(doc, payment_method)
+            add_echeck(doc, payment_method, source: options[:payment_source])
           end
         else
           wallet_id = split_authorization(payment_method).last
@@ -650,10 +650,22 @@ module ActiveMerchant #:nodoc:
         }
       end
 
-      def add_echeck(doc, payment_method)
+      def add_echeck(doc, payment_method, options = {})
+        secc_code = secc_code_from(options[:source]) || options[:source]
+        account_type =
+          case payment_method.account_type
+          when 'checking'
+            0
+          when 'savings'
+            1
+          end
+
         doc['v1'].achEcheck {
           doc['v1'].bankRtNr payment_method.routing_number
+          doc['v1'].bankName payment_method.bank_name
           doc['v1'].acctNr payment_method.account_number
+          doc['v1'].acctType account_type if account_type
+          doc['v1'].seccCode secc_code if secc_code
         }
       end
 
