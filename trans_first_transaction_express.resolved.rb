@@ -497,46 +497,46 @@ module ActiveMerchant #:nodoc:
         Hash.from_xml(new_response_body)['root']
       end
 
-      def success_from(response)
-        return unless response
+      # def success_from(response)
+      #   return unless response
 
-        fault = response['Fault']
-        approved_transaction = APPROVAL_CODES.include?(response['rspCode'])
-        found_contact = response['FndRecurrProfResponse'] || response['cust']
+      #   fault = response['Fault']
+      #   approved_transaction = APPROVAL_CODES.include?(response['rspCode'])
+      #   found_contact = response['FndRecurrProfResponse'] || response['cust']
 
-        return !fault && (approved_transaction || found_contact)
-      end
+      #   return !fault && (approved_transaction || found_contact)
+      # end
 
-      def error_code_from(succeeded, response)
-        return if succeeded
-        response['detail'].try(:[], 'SystemFault').try(:[], 'errorCode') || response['errorCode'] || response['rspCode']
-      end
+      # def error_code_from(succeeded, response)
+      #   return if succeeded
+      #   response['detail'].try(:[], 'SystemFault').try(:[], 'errorCode') || response['errorCode'] || response['rspCode']
+      # end
 
-      def message_from(succeeded, response)
-        return 'Succeeded' if succeeded
+      # def message_from(succeeded, response)
+      #   return 'Succeeded' if succeeded
 
-        if response['rspCode']
-          code = response['rspCode']
-          extended_code = response['extRspCode']
+      #   if response['rspCode']
+      #     code = response['rspCode']
+      #     extended_code = response['extRspCode']
 
-          message = RESPONSE_MESSAGES[code]
-          extended = EXTENDED_RESPONSE_MESSAGES[extended_code]
-          ach_response = response.try(:[], 'achResponse').try(:[], 'Message')
+      #     message = RESPONSE_MESSAGES[code]
+      #     extended = EXTENDED_RESPONSE_MESSAGES[extended_code]
+      #     ach_response = response.try(:[], 'achResponse').try(:[], 'Message')
 
-          [message, extended, ach_response].compact.join('. ')
-        else
-          response['faultstring']
-        end
-      end
+      #     [message, extended, ach_response].compact.join('. ')
+      #   else
+      #     response['faultstring']
+      #   end
+      # end
 
-      def authorization_from(action, response)
-        authorization = response['tranData'].try(:[], 'tranNr') || response['tranNr'] || response['pmtId']
+      # def authorization_from(action, response)
+      #   authorization = response['tranData'].try(:[], 'tranNr') || response['tranNr'] || response['pmtId']
 
-        # guard so we don't return something like "purchase|"
-        return unless authorization
+      #   # guard so we don't return something like "purchase|"
+      #   return unless authorization
 
-        [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
-      end
+      #   [action, authorization].join(AUTHORIZATION_FIELD_SEPARATOR)
+      # end
 
       def avs_from(response)
         if response['authRsp']

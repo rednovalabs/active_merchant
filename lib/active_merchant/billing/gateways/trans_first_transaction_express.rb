@@ -455,20 +455,24 @@ module ActiveMerchant #:nodoc:
       end
 
       def success_from(response)
+        return unless response
+
         fault = response['Fault']
         approved_transaction = APPROVAL_CODES.include?(response['rspCode'])
-        found_contact = response['FndRecurrProfResponse']
+        found_contact = response['FndRecurrProfResponse'] || response['cust']
 
         return !fault && (approved_transaction || found_contact)
       end
 
       def error_code_from(succeeded, response)
+        return unless response
         return if succeeded
 
-        response['errorCode'] || response['rspCode']
+        response['detail'].try(:[], 'SystemFault').try(:[], 'errorCode') || response['errorCode'] || response['rspCode']
       end
 
       def message_from(succeeded, response)
+        return unless response
         return 'Succeeded' if succeeded
 
         if response['rspCode']
@@ -477,7 +481,7 @@ module ActiveMerchant #:nodoc:
 
           message = RESPONSE_MESSAGES[code]
           extended = EXTENDED_RESPONSE_MESSAGES[extended_code]
-          ach_response = response['achResponse']
+          ach_response = response['achResponse'].try(:[], 'Message') || response['achResponse']
 
           [message, extended, ach_response].compact.join('. ')
         else
@@ -486,7 +490,9 @@ module ActiveMerchant #:nodoc:
       end
 
       def authorization_from(action, response)
-        authorization = response['tranNr'] || response['pmtId']
+        return unless response
+
+        authorization = response['tranData'].try(:[], 'tranNr') || response['tranNr'] || response['pmtId']
 
         # guard so we don't return something like "purchase|"
         return unless authorization
