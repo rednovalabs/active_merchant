@@ -358,38 +358,38 @@ module ActiveMerchant #:nodoc:
       #   commit(:verify, request)
       # end
 
-      def store(payment_method, options = {})
-        customer_id = options[:customer_id]
-        wallet_id = options[:payment_id]
+      # def store(payment_method, options = {})
+      #   customer_id = options[:customer_id]
+      #   wallet_id = options[:payment_id]
 
-        store_new_customer = !customer_id && !wallet_id
-        update_wallet = options[:create_or_update_payment_method] == :update && wallet_id
+      #   store_new_customer = !customer_id && !wallet_id
+      #   update_wallet = options[:create_or_update_payment_method] == :update && wallet_id
 
-        MultiResponse.run do |r|
-          if store_new_customer
-            r.process { store_customer(payment_method.name, options) }
-            return r unless r.success? && r.params['custId']
-            customer_id = r.params['custId']
-          elsif update_wallet
-            r.process { find_wallet(wallet_id) }
-            return r unless r.success? && r.params['cust']
-            options[:customer_id] = customer_id = r.params['cust']['contact']['id']
-            options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
-            options[:create_or_update_customer] = :update
-            r.process { store_customer(payment_method.name, options) }
-            return r unless r.success?
-          end
+      #   MultiResponse.run do |r|
+      #     if store_new_customer
+      #       r.process { store_customer(payment_method.name, options) }
+      #       return r unless r.success? && r.params['custId']
+      #       customer_id = r.params['custId']
+      #     elsif update_wallet
+      #       r.process { find_wallet(wallet_id) }
+      #       return r unless r.success? && r.params['cust']
+      #       options[:customer_id] = customer_id = r.params['cust']['contact']['id']
+      #       options[:pmt_card_pan] = r.params['cust']['pmt']['card']['pan']
+      #       options[:create_or_update_customer] = :update
+      #       r.process { store_customer(payment_method.name, options) }
+      #       return r unless r.success?
+      #     end
 
-          store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
-            add_wallet_details(doc, payment_method, customer_id, options)
-          end
+      #     store_payment_method_request = build_xml_payment_storage_request(product_type(payment_method)) do |doc|
+      #       add_wallet_details(doc, payment_method, customer_id, options)
+      #     end
 
-          response = r.process { commit(:store, store_payment_method_request) }
-          # merge the customer_id back in so callers can store it
-          response.params['custId'] = customer_id
-          response
-        end
-      end
+      #     response = r.process { commit(:store, store_payment_method_request) }
+      #     # merge the customer_id back in so callers can store it
+      #     response.params['custId'] = customer_id
+      #     response
+      #   end
+      # end
 
       # TODO: This method is not used anywhere
       # def unstore(wallet_id, options = {})
@@ -692,16 +692,16 @@ module ActiveMerchant #:nodoc:
       #   end.doc.root.to_xml
       # end
 
-      def find_wallet(wallet_id)
-        request = build_xml_payment_search_request do |doc|
-          doc['v1'].type 1 # recurring
-          doc['v1'].pmtCrta {
-            doc['v1'].pmtId wallet_id
-          }
-        end
+      # def find_wallet(wallet_id)
+      #   request = build_xml_payment_search_request do |doc|
+      #     doc['v1'].type 1 # recurring
+      #     doc['v1'].pmtCrta {
+      #       doc['v1'].pmtId wallet_id
+      #     }
+      #   end
 
-        commit(:store, request)
-      end
+      #   commit(:store, request)
+      # end
 
       # def add_transaction_code_to_request(request, action)
       #   # store requests don't get a transaction code
@@ -898,29 +898,29 @@ module ActiveMerchant #:nodoc:
       # end
 
       # TODO
-      def add_wallet_details(doc, payment_method, customer_id, options)
-        wallet_update_type = 0 # add
-        payment_status_type = 1 # active
-        case options[:create_or_update_payment_method]
-        when :update
-          wallet_update_type = 1
-          wallet_id = options[:payment_id]
-        when :delete
-          wallet_update_type = 1
-          wallet_id = options[:payment_id]
-          payment_status_type = 0 # inactive
-        end
+      # def add_wallet_details(doc, payment_method, customer_id, options)
+      #   wallet_update_type = 0 # add
+      #   payment_status_type = 1 # active
+      #   case options[:create_or_update_payment_method]
+      #   when :update
+      #     wallet_update_type = 1
+      #     wallet_id = options[:payment_id]
+      #   when :delete
+      #     wallet_update_type = 1
+      #     wallet_id = options[:payment_id]
+      #     payment_status_type = 0 # inactive
+      #   end
 
-        doc['v1'].cust do
-          add_customer_id(doc, customer_id)
-          doc['v1'].pmt do
-            doc['v1'].id wallet_id if wallet_id
-            doc['v1'].type wallet_update_type
-            add_payment_method(doc, payment_method, ach_param: 'ach', options: options)
-            doc['v1'].status payment_status_type
-          end
-        end
-      end
+      #   doc['v1'].cust do
+      #     add_customer_id(doc, customer_id)
+      #     doc['v1'].pmt do
+      #       doc['v1'].id wallet_id if wallet_id
+      #       doc['v1'].type wallet_update_type
+      #       add_payment_method(doc, payment_method, ach_param: 'ach', options: options)
+      #       doc['v1'].status payment_status_type
+      #     end
+      #   end
+      # end
 
       # def add_customer_id(doc, customer_id)
       #   doc['v1'].contact do
