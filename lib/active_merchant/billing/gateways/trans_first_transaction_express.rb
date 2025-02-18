@@ -473,21 +473,17 @@ module ActiveMerchant #:nodoc:
       def parse(xml)
         doc = Nokogiri::XML(xml).remove_namespaces!
 
-        # normalize the response body so we don't have to know the name of the
-        # root element
-        body = begin
-          doc.at_xpath('/Envelope/Body').children.first.children.to_xml
+        # normalize the response body so we don't have to know the name of the root element
+        children = begin
+          doc.at_xpath('/Envelope/Body').children.first.children
         rescue NoMethodError
-          # if their API has an error it responds with HTML :rolleyes:
-          doc.to_xml
+          # if their API has an error it responds with HTML or an empty body :rolleyes:
+          doc.root&.children
         end
-        new_response_body = <<-XML
-        <root>
-        #{body}
-        </root>
-        XML
+        doc.root = doc.create_element('root')
+        doc.root.children = children if children.present?
 
-        Hash.from_xml(new_response_body)['root']
+        Hash.from_xml(doc.to_xml)['root'] || {}
       end
 
       def success_from(response)
